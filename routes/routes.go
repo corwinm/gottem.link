@@ -7,6 +7,7 @@ import (
 
 func NewRouter() *http.ServeMux {
 	router := http.NewServeMux()
+	router.HandleFunc("/{slug}", handlers.RedirectHandler)
 	router.HandleFunc("/", handlers.HelloHandler)
 	return router
 }
