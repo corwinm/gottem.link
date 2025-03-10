@@ -1,7 +1,13 @@
 package main
 
-import "fmt"
+import (
+	"corwinm/gottem.link/routes"
+	"log"
+	"net/http"
+)
 
 func main() {
-	fmt.Println("Hello, World!")
+	log.Println("Server is running on http://localhost:8080")
+	router := routes.NewRouter()
+	log.Fatal(http.ListenAndServe(":8080", router))
 }
