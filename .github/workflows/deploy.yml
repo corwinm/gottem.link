@@ -26,6 +26,8 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version: '^1.24.1'
+
+      - name: Check Version
         run: go version
 
       - name: Build
