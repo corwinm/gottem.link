@@ -16,8 +16,8 @@ func RedirectHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	slug := strings.ToLower(rawSlug)
 
-	dataSourceName := flag.String("dsn", "gottem.db", "Database file")
-	gottemDb, err := db.GetDB(*dataSourceName)
+	dataSourceName := flag.Arg(1)
+	gottemDb, err := db.GetDB(dataSourceName)
 	if err != nil {
 		fmt.Println("Error loading DB: ", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
