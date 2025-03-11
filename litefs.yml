@@ -19,20 +19,20 @@ exit-on-error: false
 # This section defines settings for the option HTTP proxy.
 # This proxy can handle primary forwarding & replica consistency
 # for applications that use a single SQLite database.
-# proxy:
-#   addr: ":8080"
-#   target: "localhost:8080"
-#   db: "gottem.db"
-#   passthrough: 
-#     - "*.ico"
-#     - "*.png"
+proxy:
+  addr: ":8080"
+  target: "localhost:8081"
+  db: "gottem.db"
+  passthrough: 
+    - "*.ico"
+    - "*.png"
 
 # This section defines a list of commands to run after LiteFS has connected
 # and sync'd with the cluster. You can run multiple commands but LiteFS expects
 # the last command to be long-running (e.g. an application server). When the
 # last command exits, LiteFS is shut down.
 exec:
-  - cmd: "run-app"
+  - cmd: "run-app -addr :8081 -dsn /litefs/gottem.db"
 
 # The lease section specifies how the cluster will be managed. We're using the
 # "consul" lease type so that our application can dynamically change the primary.

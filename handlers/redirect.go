@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"corwinm/gottem.link/db"
+	"flag"
 	"fmt"
 	"net/http"
 	"strings"
@@ -15,7 +16,8 @@ func RedirectHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	slug := strings.ToLower(rawSlug)
 
-	gottemDb, err := db.GetDB("/litefs/gottem.db")
+	dataSourceName := flag.String("dsn", "gottem.db", "Database file")
+	gottemDb, err := db.GetDB(*dataSourceName)
 	if err != nil {
 		fmt.Println("Error loading DB: ", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
