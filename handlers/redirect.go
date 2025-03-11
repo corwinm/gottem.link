@@ -15,7 +15,7 @@ func RedirectHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	slug := strings.ToLower(rawSlug)
 
-	gottemDb, err := db.GetDB("gottem.db")
+	gottemDb, err := db.GetDB("/litefs/gottem.db")
 	if err != nil {
 		fmt.Println("Error loading DB: ", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
