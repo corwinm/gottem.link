@@ -1,0 +1,70 @@
+name: 🚀 Deploy
+on:
+  push:
+    branches:
+      - main
+      - dev
+  pull_request: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout repo
+      - uses: actions/checkout@v4
+
+      - name: Setup GO
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '^1.24.1'
+      - run: go version
+
+      - name: Build
+      - run: go build
+
+  deploy:
+    name: 🚀 Deploy
+    runs-on: ubuntu-22.04
+    needs: [build]
+    # only build/deploy branches on pushes
+    if: ${{ github.event_name == 'push' }}
+
+    steps:
+      - name: ⬇️ Checkout repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: '50'
+
+      - name: 👀 Read app name
+        uses: SebRollen/toml-action@v1.2.0
+        id: app_name
+        with:
+          file: 'fly.toml'
+          field: 'app'
+
+      - name: 🎈 Setup Fly
+        uses: superfly/flyctl-actions/setup-flyctl@1.5
+
+      # - name: 🚀 Deploy Staging
+      #   if: ${{ github.ref == 'refs/heads/dev' }}
+      #   run:
+      #     flyctl deploy --remote-only --build-arg COMMIT_SHA=${{ github.sha }}
+      #     --app ${{ steps.app_name.outputs.value }}-staging
+      #   env:
+      #     FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+
+      - name: 🚀 Deploy Production
+        if: ${{ github.ref == 'refs/heads/main' }}
+        run:
+          flyctl deploy --remote-only --build-arg COMMIT_SHA=${{ github.sha }}
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
