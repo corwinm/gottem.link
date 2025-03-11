@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"corwinm/gottem.link/db"
 	"fmt"
 	"net/http"
 	"strings"
@@ -13,5 +14,21 @@ func RedirectHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	slug := strings.ToLower(rawSlug)
+
+	gottemDb, err := db.GetDB("gottem.db")
+	if err != nil {
+		fmt.Println("Error loading DB: ", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+	defer gottemDb.Close()
+
+	url, err := gottemDb.QuerySlug(slug)
+	if err != nil {
+		http.Error(w, "Slug not found", http.StatusNotFound)
+		return
+	}
+
 	fmt.Fprintln(w, "Redirecting to:", slug)
+	http.Redirect(w, r, url, http.StatusFound)
 }

@@ -27,3 +27,6 @@ go.work.sum
 # Air
 tmp/
 
+# Sqlite
+*.db
+
