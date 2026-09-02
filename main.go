@@ -14,15 +14,6 @@ func main() {
 		log.Fatal(err)
 	}
 
-	if config.migrateOnly {
-		database, err := db.GetDB(config.dsn)
-		if err != nil {
-			log.Fatal(err)
-		}
-		database.Close()
-		return
-	}
-
 	database, err := db.Open(config.dsn)
 	if err != nil {
 		log.Fatal(err)
