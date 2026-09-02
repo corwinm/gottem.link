@@ -1,0 +1,22 @@
+#!/bin/sh
+set -eu
+
+if [ "$#" -ne 1 ]; then
+	printf 'usage: %s BACKUP.db\n' "$0" >&2
+	exit 2
+fi
+
+backup=$1
+if [ ! -f "$backup" ]; then
+	printf 'backup not found: %s\n' "$backup" >&2
+	exit 1
+fi
+
+result=$(sqlite3 -readonly "$backup" "PRAGMA quick_check; SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = 'redirects';")
+if [ "$result" != "ok
+1" ]; then
+	printf 'backup validation failed\n' >&2
+	exit 1
+fi
+
+printf 'backup is valid\n'

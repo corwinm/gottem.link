@@ -1,4 +1,4 @@
-.PHONY: build check fmt fmt-check race run test tidy-check tools vet vuln
+.PHONY: backup-test build check container-test fmt fmt-check race run test tidy-check tools vet vuln
 
 GO ?= go
 GOVULNCHECK ?= ./.bin/govulncheck
@@ -30,7 +30,13 @@ vuln:
 build:
 	$(GO) build ./...
 
-check: fmt-check tidy-check test race vet vuln build
+backup-test:
+	scripts/test-backup-restore
+
+container-test:
+	scripts/test-container
+
+check: fmt-check tidy-check test race vet vuln build backup-test
 
 tools:
 	mkdir -p .bin

@@ -64,3 +64,51 @@ func TestRouterReturnsInternalServerErrorWhenDatabaseFails(t *testing.T) {
 		t.Errorf("status = %d, want %d", recorder.Code, http.StatusInternalServerError)
 	}
 }
+
+func TestRouterHealthDoesNotRequireDatabase(t *testing.T) {
+	database, err := db.Open(filepath.Join(t.TempDir(), "missing", "gottem.db"))
+	if err != nil {
+		t.Fatalf("open database handle: %v", err)
+	}
+	t.Cleanup(database.Close)
+
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/healthz", nil)
+	routes.NewRouter(database).ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusOK {
+		t.Errorf("status = %d, want %d", recorder.Code, http.StatusOK)
+	}
+}
+
+func TestRouterReadinessChecksDatabase(t *testing.T) {
+	database, err := db.GetDB(filepath.Join(t.TempDir(), "gottem.db"))
+	if err != nil {
+		t.Fatalf("initialize database: %v", err)
+	}
+	t.Cleanup(database.Close)
+
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/readyz", nil)
+	routes.NewRouter(database).ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusOK {
+		t.Errorf("status = %d, want %d", recorder.Code, http.StatusOK)
+	}
+}
+
+func TestRouterReadinessFailsWhenDatabaseFails(t *testing.T) {
+	database, err := db.Open(filepath.Join(t.TempDir(), "missing", "gottem.db"))
+	if err != nil {
+		t.Fatalf("open database handle: %v", err)
+	}
+	t.Cleanup(database.Close)
+
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodGet, "/readyz", nil)
+	routes.NewRouter(database).ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusServiceUnavailable {
+		t.Errorf("status = %d, want %d", recorder.Code, http.StatusServiceUnavailable)
+	}
+}

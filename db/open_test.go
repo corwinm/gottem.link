@@ -1,6 +1,7 @@
 package db_test
 
 import (
+	"context"
 	"path/filepath"
 	"testing"
 
@@ -34,5 +35,29 @@ func TestOpenDoesNotCreateOrMigrateSchema(t *testing.T) {
 	}
 	if redirectsExist {
 		t.Fatal("Open created the redirects table; want a non-writing open")
+	}
+}
+
+func TestReadyRequiresRedirectsTable(t *testing.T) {
+	database, err := db.Open(filepath.Join(t.TempDir(), "gottem.db"))
+	if err != nil {
+		t.Fatalf("open database: %v", err)
+	}
+	t.Cleanup(database.Close)
+
+	if err := database.Ready(context.Background()); err == nil {
+		t.Fatal("Ready returned nil without the redirects table")
+	}
+}
+
+func TestReadyAcceptsInitializedDatabase(t *testing.T) {
+	database, err := db.GetDB(filepath.Join(t.TempDir(), "gottem.db"))
+	if err != nil {
+		t.Fatalf("initialize database: %v", err)
+	}
+	t.Cleanup(database.Close)
+
+	if err := database.Ready(context.Background()); err != nil {
+		t.Fatalf("Ready returned an error: %v", err)
 	}
 }

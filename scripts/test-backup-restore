@@ -1,0 +1,23 @@
+#!/bin/sh
+set -eu
+
+root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+tmp=$(mktemp -d "${TMPDIR:-/tmp}/gottem-backup-test.XXXXXX")
+trap 'rm -rf "$tmp"' EXIT HUP INT TERM
+
+source_db="$tmp/source.db"
+backup_db="$tmp/backup.db"
+restored_db="$tmp/restored.db"
+
+sqlite3 "$source_db" <<'SQL'
+CREATE TABLE redirects (id INTEGER PRIMARY KEY, slug TEXT, url TEXT);
+INSERT INTO redirects (slug, url) VALUES ('example', 'https://example.com');
+SQL
+sqlite3 "$source_db" ".backup '$backup_db'"
+"$root/scripts/check-sqlite-backup" "$backup_db"
+cp "$backup_db" "$restored_db"
+
+result=$(sqlite3 "$restored_db" "SELECT slug || '|' || url FROM redirects;")
+test "$result" = "example|https://example.com"
+
+printf 'backup restore smoke test passed\n'

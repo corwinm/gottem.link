@@ -1,6 +1,7 @@
 package db
 
 import (
+	"context"
 	"database/sql"
 
 	_ "github.com/mattn/go-sqlite3"
@@ -67,6 +68,14 @@ func (db *DbWrapper) Query(query string, args ...interface{}) (*sql.Rows, error)
 // QueryRow a SQL statement
 func (db *DbWrapper) QueryRow(query string, args ...interface{}) *sql.Row {
 	return db.db.QueryRow(query, args...)
+}
+
+func (db *DbWrapper) Ready(ctx context.Context) error {
+	rows, err := db.db.QueryContext(ctx, "SELECT 1 FROM redirects LIMIT 0")
+	if err != nil {
+		return err
+	}
+	return rows.Close()
 }
 
 func (db *DbWrapper) QuerySlug(slug string) (string, error) {
