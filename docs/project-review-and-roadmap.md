@@ -10,11 +10,18 @@
 
 ---
 
-## Executive summary
+## Current status
 
-The repository is a deployed, reachable prototype. The existing Fly.io deployment serves the application at `https://gottem.link`, and Corwin reports that the deployment process works. This review verified public HTTP availability but did not redeploy the current commit or inspect Fly's internal state. The checked-in application still has two blocking defects in its redirect path: the configured database path is ignored, and successful lookups are written as HTTP 200 instead of 302. There is also no supported way to create or manage links.
+Updated against `main` at `33ff795` on 2026-09-02.
 
-The right first milestone is **application correctness**, not deployment recovery or feature expansion. Preserve the working Fly deployment while fixing configuration and redirect semantics, adding characterization tests, and making CI enforce the local quality loop. Then add an authenticated management API that both a small UI and personal automation can use.
+- **Complete:** Go 1.27 is aligned across local, CI, Docker, and Fly builds; `govulncheck` is clean.
+- **Complete:** configuration is parsed once, the configured database is injected into the router, and redirect behavior is covered for found, missing, and database-error cases.
+- **Complete:** found slugs return HTTP 302 with `Location`; missing slugs return 404; operational database failures return 500.
+- **Blocked:** the transactional schema migration from PR #5 passed local and CI checks but prevented production startup. PRs #8 and #9 rolled it back while preserving the incident history. A future migration attempt requires a database backup and production-realistic LiteFS validation first.
+- **Complete:** PR #10 corrected Fly's primary region from `sea` to `sjc`, matching both deployed machines and volumes. This restored LiteFS primary election and public HTTP availability.
+- **Next:** add the repository development contract and CI quality gates, then document and test the deployment/backup path before retrying schema changes.
+
+The service is again reachable at `https://gottem.link`, but there is still no supported way to create or manage links.
 
 ## Verified current state
 
@@ -36,7 +43,9 @@ Reviewed against `main` at `9c4cef3` on 2026-09-02.
 - Fly's internal machine and volume state could not be inspected because `flyctl` is not installed. Public HTTP checks confirm that the deployment is running and serving traffic.
 - Follow-up verification after this review: GitHub Actions run `33608364149` successfully built and deployed `main` at `6bfba77`, confirming the checked-in deployment workflow currently completes.
 
-## Findings
+## Original findings
+
+The findings below describe the repository at the original review commit. Use the current-status section and roadmap status labels for present state.
 
 ### P0 — Redirects do not work correctly
 
@@ -124,7 +133,7 @@ Keep it short and update it as commands become real:
 
 ### Milestone 0 — Recover a trustworthy redirect service
 
-#### 0.0 Upgrade the Go toolchain
+#### 0.0 Upgrade the Go toolchain — Complete
 
 - Move `go.mod`, CI, and the Docker build to the same currently supported Go release.
 - Run tests, race tests, vet, build, `go mod tidy -diff`, and `govulncheck` under that toolchain.
@@ -132,7 +141,7 @@ Keep it short and update it as commands become real:
 
 **Done when:** all build surfaces use one supported Go version and `govulncheck ./...` reports no reachable vulnerabilities.
 
-#### 0.1 Characterize and fix configuration
+#### 0.1 Characterize and fix configuration — Complete except startup validation
 
 - Add failing tests proving that a configured database is used.
 - Parse `-addr` and `-dsn` into an application configuration object.
@@ -141,7 +150,7 @@ Keep it short and update it as commands become real:
 
 **Done when:** the production-style command reads a seeded persistent database, restart preserves its links, and tests fail if the DSN is ignored.
 
-#### 0.2 Fix redirect HTTP semantics
+#### 0.2 Fix redirect HTTP semantics — Complete
 
 - Do not write a response body before `http.Redirect`.
 - Define case sensitivity and slug syntax explicitly.
@@ -150,7 +159,7 @@ Keep it short and update it as commands become real:
 
 **Done when:** a found slug returns the chosen 3xx status and `Location`, a missing slug returns 404, and operational failures return 500 without leaking internals.
 
-#### 0.3 Establish schema and migrations
+#### 0.3 Establish schema and migrations — Blocked after production rollback
 
 - Replace request-time table creation with startup migrations.
 - Make `slug` unique and non-null; make `url` non-null.
@@ -159,7 +168,9 @@ Keep it short and update it as commands become real:
 
 **Done when:** duplicate slugs fail predictably and a fresh database reaches the expected schema through a repeatable command/startup path.
 
-#### 0.4 Add the repository development contract
+**Current note:** PR #5 implemented and tested this locally, but its production deployment exposed an unsafe startup path and was rolled back in PRs #8 and #9. Do not retry until the production database is backed up and the LiteFS execution path is reproduced outside production.
+
+#### 0.4 Add the repository development contract — Next
 
 - Add `AGENTS.md` and expand `README.md` with setup, run, test, configuration, and deployment architecture.
 - Add transparent local quality commands.
@@ -168,7 +179,7 @@ Keep it short and update it as commands become real:
 
 **Done when:** a new human or coding agent can clone the repository and run the complete verification loop without guessing.
 
-#### 0.5 Document and regression-test the working deployment
+#### 0.5 Document and regression-test the working deployment — In progress
 
 - Preserve the current Fly.io path while application-level changes are being stabilized.
 - Document the current LiteFS/volume topology and decide later whether plain SQLite would be a worthwhile simplification.
@@ -254,12 +265,12 @@ Avoid accounts, teams, billing, distributed caches, event pipelines, or multi-re
 
 ## Recommended first issues
 
-1. **Upgrade the pinned Go toolchain and verify the vulnerability scan.**
-2. **Add failing handler tests for DSN usage and redirect status.**
-3. **Inject a long-lived database into handlers and fix redirect responses.**
-4. **Add a unique schema migration and database integration tests.**
-5. **Add `AGENTS.md`, complete local commands, and CI quality gates.**
-6. **Document and regression-test the Fly deployment and backup path.**
+1. **Complete:** Upgrade the pinned Go toolchain and verify the vulnerability scan.
+2. **Complete:** Add failing handler tests for DSN usage and redirect status.
+3. **Complete:** Inject a long-lived database into handlers and fix redirect responses.
+4. **Blocked:** Add a unique schema migration and database integration tests; retry only after backup and production-realistic LiteFS validation.
+5. **Next:** Add `AGENTS.md`, complete local commands, and CI quality gates.
+6. **In progress:** Document and regression-test the Fly deployment and backup path.
 7. **Add token-authenticated create and list endpoints.**
 8. **Add update, disable, and delete endpoints.**
 9. **Add the JSON-capable management CLI.**
