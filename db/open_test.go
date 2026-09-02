@@ -7,6 +7,14 @@ import (
 	"corwinm/gottem.link/db"
 )
 
+func TestOpenRejectsInaccessibleDatabase(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "missing", "gottem.db")
+	if database, err := db.Open(path); err == nil {
+		database.Close()
+		t.Fatal("Open succeeded for a database in a missing directory")
+	}
+}
+
 func TestOpenDoesNotCreateOrMigrateSchema(t *testing.T) {
 	database, err := db.Open(filepath.Join(t.TempDir(), "gottem.db"))
 	if err != nil {
