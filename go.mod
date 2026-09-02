@@ -1,5 +1,5 @@
 module corwinm/gottem.link
 
-go 1.24.1
+go 1.27.0
 
-require github.com/mattn/go-sqlite3 v1.14.24 // indirect
+require github.com/mattn/go-sqlite3 v1.14.24

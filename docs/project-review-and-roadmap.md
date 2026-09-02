@@ -6,7 +6,7 @@
 
 **Architecture direction:** Keep the application as a small Go service backed by SQLite. Establish explicit configuration, a long-lived database dependency, tested HTTP handlers, and a private management API before adding UI or analytics. Reassess whether LiteFS is useful for a single-region, single-owner deployment rather than expanding the infrastructure by default.
 
-**Tech stack:** Go 1.24, `net/http`, SQLite, Fly.io, GitHub Actions.
+**Tech stack:** Go 1.27, `net/http`, SQLite, Fly.io, GitHub Actions.
 
 ---
 
@@ -34,6 +34,7 @@ Reviewed against `main` at `9c4cef3` on 2026-09-02.
 - A `Fly Deploy` environment and `FLY_API_TOKEN` secret exist. The workflow deploys without explicitly targeting that environment; attaching it would be optional hardening rather than a prerequisite for deployment.
 - Docker could not be exercised locally because Docker is not installed on this machine.
 - Fly's internal machine and volume state could not be inspected because `flyctl` is not installed. Public HTTP checks confirm that the deployment is running and serving traffic.
+- Follow-up verification after this review: GitHub Actions run `33608364149` successfully built and deployed `main` at `6bfba77`, confirming the checked-in deployment workflow currently completes.
 
 ## Findings
 
