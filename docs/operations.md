@@ -8,12 +8,14 @@ Machines may stop when idle. `primary_region` in `fly.toml` must match the machi
 
 ## Health
 
-- `GET /healthz` returns 200 when the Go process can serve HTTP. Fly uses this for deployment health checks.
-- `GET /readyz` returns 200 only when the `redirects` table can be queried; otherwise it returns 503.
+- `GET /.well-known/healthz` returns 200 when the Go process can serve HTTP. Fly uses this for deployment health checks.
+- `GET /.well-known/readyz` returns 200 only when the `redirects` table can be queried; otherwise it returns 503.
+
+The multi-segment namespace keeps these operational routes from shadowing existing one-segment redirect slugs.
 
 ## Deploy and rollback
 
-Pull requests run `make check` and the production-image smoke test. A merge to `main` deploys only after both pass. Verify the Actions run, `fly status -a gottem-link`, `/healthz`, and `/readyz` after deployment.
+Pull requests run `make check` and the production-image smoke test. A merge to `main` deploys only after both pass. Verify the Actions run, `fly status -a gottem-link`, `/.well-known/healthz`, and `/.well-known/readyz` after deployment.
 
 Rollback application changes with a reviewed revert PR. Do not alter or destroy volumes as an application rollback.
 
@@ -43,4 +45,4 @@ Fly takes daily volume snapshots and currently retains them for five days. Befor
 
 Run `make backup-test` to exercise backup validation and restoration against a disposable SQLite database.
 
-A production restore replaces the live database and requires explicit approval. Validate the backup first, upload it to the current primary, run `litefs import -name gottem.db PATH`, then verify `/readyz` and known redirects. Never copy a database directly into `/litefs` or `/var/lib/litefs`.
+A production restore replaces the live database and requires explicit approval. Validate the backup first, upload it to the current primary, run `litefs import -name gottem.db PATH`, then verify `/.well-known/readyz` and known redirects. Never copy a database directly into `/litefs` or `/var/lib/litefs`.

@@ -7,6 +7,10 @@ if [ "$#" -ne 1 ]; then
 fi
 
 backup=$1
+if ! command -v sqlite3 >/dev/null 2>&1; then
+	printf 'sqlite3 is required\n' >&2
+	exit 1
+fi
 if [ ! -f "$backup" ]; then
 	printf 'backup not found: %s\n' "$backup" >&2
 	exit 1

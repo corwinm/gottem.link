@@ -17,7 +17,7 @@ container=$(docker run -d -p 127.0.0.1::8080 --entrypoint sh "$image" -c \
 address=$(docker port "$container" 8080/tcp)
 
 attempt=0
-until body=$(curl --fail --silent --show-error --max-time 2 "http://$address/healthz"); do
+until body=$(curl --fail --silent --show-error --max-time 2 "http://$address/.well-known/healthz"); do
 	attempt=$((attempt + 1))
 	if [ "$attempt" -ge 30 ]; then
 		docker logs "$container" >&2
@@ -27,5 +27,5 @@ until body=$(curl --fail --silent --show-error --max-time 2 "http://$address/hea
 done
 test "$body" = "ok"
 
-test "$(curl --fail --silent --show-error --max-time 2 "http://$address/readyz")" = "ok"
+test "$(curl --fail --silent --show-error --max-time 2 "http://$address/.well-known/readyz")" = "ok"
 printf 'container smoke test passed\n'

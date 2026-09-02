@@ -29,7 +29,7 @@ primary_region = 'sjc'
     grace_period = '10s'
     interval = '30s'
     method = 'GET'
-    path = '/healthz'
+    path = '/.well-known/healthz'
     timeout = '2s'
 
 [[vm]]
