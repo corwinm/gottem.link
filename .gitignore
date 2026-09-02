@@ -27,6 +27,9 @@ go.work.sum
 # Air
 tmp/
 
+# Local tools
+.bin/
+
 # Sqlite
 *.db
 

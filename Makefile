@@ -1,7 +1,7 @@
 .PHONY: build check fmt fmt-check race run test tidy-check tools vet vuln
 
 GO ?= go
-GOVULNCHECK ?= govulncheck
+GOVULNCHECK ?= ./.bin/govulncheck
 GO_FILES := $(shell git ls-files '*.go')
 
 fmt:
@@ -24,7 +24,7 @@ vet:
 	$(GO) vet ./...
 
 vuln:
-	@command -v $(GOVULNCHECK) >/dev/null || { echo 'Run make tools first'; exit 1; }
+	@test -x $(GOVULNCHECK) || { echo 'Run make tools first'; exit 1; }
 	$(GOVULNCHECK) ./...
 
 build:
@@ -33,7 +33,8 @@ build:
 check: fmt-check tidy-check test race vet vuln build
 
 tools:
-	GOTOOLCHAIN=$$($(GO) env GOVERSION) $(GO) install golang.org/x/vuln/cmd/govulncheck@v1.7.0
+	mkdir -p .bin
+	GOBIN=$(CURDIR)/.bin GOTOOLCHAIN=$$($(GO) env GOVERSION) $(GO) install golang.org/x/vuln/cmd/govulncheck@v1.7.0
 
 run:
 	$(GO) run . -addr :8080 -dsn ./gottem.db
