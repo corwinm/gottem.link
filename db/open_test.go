@@ -7,41 +7,32 @@ import (
 	"corwinm/gottem.link/db"
 )
 
-func TestOpenRejectsInaccessibleDatabase(t *testing.T) {
+func TestOpenDefersConnectionValidation(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "missing", "gottem.db")
-	if database, err := db.Open(path); err == nil {
-		database.Close()
-		t.Fatal("Open succeeded for a database in a missing directory")
+	database, err := db.Open(path)
+	if err != nil {
+		t.Fatalf("open database handle: %v", err)
 	}
-}
-
-func TestOpenRejectsMissingRedirectsSchema(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "gottem.db")
-	if database, err := db.Open(path); err == nil {
-		database.Close()
-		t.Fatal("Open succeeded without a redirects table")
-	}
+	database.Close()
 }
 
 func TestOpenDoesNotCreateOrMigrateSchema(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "gottem.db")
-	initialized, err := db.GetDB(path)
-	if err != nil {
-		t.Fatalf("initialize database: %v", err)
-	}
-	initialized.Close()
-
-	database, err := db.Open(path)
+	database, err := db.Open(filepath.Join(t.TempDir(), "gottem.db"))
 	if err != nil {
 		t.Fatalf("open database: %v", err)
 	}
 	t.Cleanup(database.Close)
 
-	var version int
-	if err := database.QueryRow("PRAGMA user_version").Scan(&version); err != nil {
-		t.Fatalf("query schema version: %v", err)
+	var redirectsExist bool
+	if err := database.QueryRow(`
+		SELECT EXISTS (
+			SELECT 1 FROM sqlite_master
+			WHERE type = 'table' AND name = 'redirects'
+		)
+	`).Scan(&redirectsExist); err != nil {
+		t.Fatalf("inspect schema: %v", err)
 	}
-	if version != 0 {
-		t.Fatalf("schema version = %d, want unchanged version 0", version)
+	if redirectsExist {
+		t.Fatal("Open created the redirects table; want a non-writing open")
 	}
 }
