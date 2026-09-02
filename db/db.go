@@ -1,13 +1,50 @@
 package db
 
 import (
+	"context"
 	"database/sql"
+	"fmt"
+	"time"
 
 	_ "github.com/mattn/go-sqlite3"
 )
 
+const databaseOpenTimeout = 10 * time.Second
+
 type DbWrapper struct {
 	db *sql.DB
+}
+
+// Open returns a validated database handle without performing schema writes.
+func Open(dsn string) (*DbWrapper, error) {
+	database, err := sql.Open("sqlite3", dsn)
+	if err != nil {
+		return nil, fmt.Errorf("open database: %w", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), databaseOpenTimeout)
+	defer cancel()
+	if err := database.PingContext(ctx); err != nil {
+		_ = database.Close()
+		return nil, fmt.Errorf("connect to database: %w", err)
+	}
+
+	var redirectsExist bool
+	if err := database.QueryRowContext(ctx, `
+		SELECT EXISTS (
+			SELECT 1 FROM sqlite_master
+			WHERE type = 'table' AND name = 'redirects'
+		)
+	`).Scan(&redirectsExist); err != nil {
+		_ = database.Close()
+		return nil, fmt.Errorf("inspect database schema: %w", err)
+	}
+	if !redirectsExist {
+		_ = database.Close()
+		return nil, fmt.Errorf("database schema is missing redirects table")
+	}
+
+	return &DbWrapper{database}, nil
 }
 
 type TableMeta struct {
