@@ -20,7 +20,8 @@ Updated against `main` at `3881584` on 2026-09-02.
 - **Blocked:** the transactional schema migration from PR #5 passed local and CI checks but prevented production startup. PRs #8 and #9 rolled it back while preserving the incident history. A future migration attempt requires a database backup and production-realistic LiteFS validation first.
 - **Complete:** PR #10 corrected Fly's primary region from `sea` to `sjc`, matching both deployed machines and volumes. This restored LiteFS primary election and public HTTP availability.
 - **Complete:** the root `AGENTS.md`, README, Makefile, and CI now define one local and remote quality contract.
-- **Next:** document and test the deployment/backup path before retrying schema changes.
+- **Complete:** deployment topology, container behavior, health/readiness, graceful shutdown, and backup/restore verification are documented and tested.
+- **Next:** create and validate a production backup, then redesign the schema-migration rollout around the verified LiteFS lifecycle.
 
 The service is again reachable at `https://gottem.link`, but there is still no supported way to create or manage links.
 
@@ -180,7 +181,7 @@ Keep it short and update it as commands become real:
 
 **Done when:** a new human or coding agent can clone the repository and run the complete verification loop without guessing.
 
-#### 0.5 Document and regression-test the working deployment — In progress
+#### 0.5 Document and regression-test the working deployment — Complete
 
 - Preserve the current Fly.io path while application-level changes are being stabilized.
 - Document the current LiteFS/volume topology and decide later whether plain SQLite would be a worthwhile simplification.

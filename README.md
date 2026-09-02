@@ -4,7 +4,7 @@ A small personal URL shortener written in Go with SQLite.
 
 ## Development
 
-Requires Go 1.27, a C compiler for `go-sqlite3`, and `make`.
+Requires Go 1.27, a C compiler for `go-sqlite3`, `sqlite3`, and `make`.
 
 ```sh
 make tools
@@ -25,6 +25,10 @@ go run . -addr :3000 -dsn /path/to/gottem.db
 ## Deployment
 
 Merges to `main` deploy `gottem-link` through the `Fly Deploy` GitHub environment. Fly runs two machines in `sjc`; each has a LiteFS volume, and LiteFS proxies public traffic to the Go server.
+
+- `make container-test` builds the production image and exercises its LiteFS entrypoint under Docker.
+- `/.well-known/healthz` reports process health; `/.well-known/readyz` verifies database readiness.
+- [Operations](docs/operations.md) covers topology, backups, restore testing, and rollback.
 
 Do not change production secrets, volumes, LiteFS topology, or the database schema without a backup and an explicit rollout plan.
 

@@ -35,10 +35,21 @@ jobs:
       - name: Check
         run: make check
 
+  container:
+    name: Container
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - name: Smoke test image
+        run: make container-test
+
   deploy:
     name: Deploy
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: quality
+    needs: [quality, container]
     runs-on: ubuntu-22.04
     timeout-minutes: 15
     environment: Fly Deploy

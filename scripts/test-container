@@ -1,0 +1,43 @@
+#!/bin/sh
+set -eu
+
+root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+image="gottem-link-smoke:${GITHUB_SHA:-local}"
+container=
+cleanup() {
+	if [ -n "$container" ]; then
+		docker rm -f "$container" >/dev/null 2>&1 || true
+	fi
+	docker image rm "$image" >/dev/null 2>&1 || true
+}
+trap cleanup EXIT HUP INT TERM
+
+docker build --build-arg GO_VERSION=1.27.0 -t "$image" "$root"
+container=$(docker run -d --privileged -p 127.0.0.1::8080 \
+	-v "$root/testdata/litefs.yml:/etc/litefs.yml:ro" "$image")
+address=$(docker port "$container" 8080/tcp)
+
+attempt=0
+until body=$(curl --fail --silent --show-error --max-time 2 "http://$address/.well-known/healthz"); do
+	attempt=$((attempt + 1))
+	if [ "$attempt" -ge 30 ]; then
+		docker logs "$container" >&2
+		exit 1
+	fi
+	sleep 1
+done
+test "$body" = "ok"
+
+status=$(curl --silent --output /dev/null --write-out '%{http_code}' \
+	--max-time 2 "http://$address/.well-known/readyz")
+test "$status" = "503"
+
+docker exec "$container" sqlite3 /litefs/gottem.db \
+	"CREATE TABLE redirects (id INTEGER PRIMARY KEY, slug TEXT, url TEXT); INSERT INTO redirects (slug, url) VALUES ('healthz', 'https://example.com/healthz');"
+test "$(curl --fail --silent --show-error --max-time 2 "http://$address/.well-known/readyz")" = "ok"
+
+redirect=$(curl --silent --show-error --max-time 2 --output /dev/null \
+	--write-out '%{http_code}|%{redirect_url}' "http://$address/healthz")
+test "$redirect" = "302|https://example.com/healthz"
+
+printf 'LiteFS container smoke test passed\n'
