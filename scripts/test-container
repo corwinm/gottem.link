@@ -30,11 +30,11 @@ test "$body" = "ok"
 
 status=$(curl --silent --output /dev/null --write-out '%{http_code}' \
 	--max-time 2 "http://$address/.well-known/readyz")
-test "$status" = "503"
+test "$status" = "200"
 
+test "$(docker exec "$container" sqlite3 -readonly /litefs/gottem.db "PRAGMA user_version;")" = "1"
 docker exec "$container" sqlite3 /litefs/gottem.db \
-	"CREATE TABLE redirects (id INTEGER PRIMARY KEY, slug TEXT, url TEXT); INSERT INTO redirects (slug, url) VALUES ('healthz', 'https://example.com/healthz');"
-test "$(curl --fail --silent --show-error --max-time 2 "http://$address/.well-known/readyz")" = "ok"
+	"INSERT INTO redirects (slug, url) VALUES ('healthz', 'https://example.com/healthz');"
 
 redirect=$(curl --silent --show-error --max-time 2 --output /dev/null \
 	--write-out '%{http_code}|%{redirect_url}' "http://$address/healthz")

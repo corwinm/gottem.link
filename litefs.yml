@@ -11,10 +11,9 @@ fuse:
 data:
   dir: "/var/lib/litefs"
 
-# This flag ensure that LiteFS continues to run if there is an issue on starup.
-# It makes it easy to ssh in and debug any issues you might be having rather
-# than continually restarting on initialization failure.
-exit-on-error: false
+# Fail the Machine startup if LiteFS or a supervised command fails. This keeps a
+# failed schema migration from falling through to the serving command.
+exit-on-error: true
 
 # This section defines settings for the option HTTP proxy.
 # This proxy can handle primary forwarding & replica consistency
@@ -32,6 +31,8 @@ proxy:
 # the last command to be long-running (e.g. an application server). When the
 # last command exits, LiteFS is shut down.
 exec:
+  - cmd: "run-app -migrate-only -dsn /litefs/gottem.db"
+    if-candidate: true
   - cmd: "run-app -addr :8081 -dsn /litefs/gottem.db"
 
 # The lease section specifies how the cluster will be managed. We're using the

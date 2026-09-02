@@ -9,11 +9,13 @@ source_db="$tmp/source.db"
 backup_db="$tmp/backup.db"
 restored_db="$tmp/restored.db"
 invalid_db="$tmp/invalid.db"
+invalid_null_db="$tmp/invalid-null.db"
+invalid_duplicate_db="$tmp/invalid-duplicate.db"
+invalid_current_db="$tmp/invalid-current.db"
+legacy_db="$tmp/legacy.db"
 
-sqlite3 "$source_db" <<'SQL'
-CREATE TABLE redirects (id INTEGER PRIMARY KEY, slug TEXT, url TEXT);
-INSERT INTO redirects (slug, url) VALUES ('example', 'https://example.com');
-SQL
+(cd "$root" && go run . -migrate-only -dsn "$source_db")
+sqlite3 "$source_db" "INSERT INTO redirects (slug, url) VALUES ('example', 'https://example.com');"
 sqlite3 "$source_db" ".backup '$backup_db'"
 "$root/scripts/check-sqlite-backup" "$backup_db"
 cp "$backup_db" "$restored_db"
@@ -21,9 +23,30 @@ cp "$backup_db" "$restored_db"
 result=$(sqlite3 "$restored_db" "SELECT slug || '|' || url FROM redirects;")
 test "$result" = "example|https://example.com"
 
-sqlite3 "$invalid_db" "CREATE TABLE redirects (id INTEGER PRIMARY KEY);"
+sqlite3 "$legacy_db" "CREATE TABLE redirects (id INTEGER PRIMARY KEY, slug TEXT, url TEXT);"
+"$root/scripts/check-sqlite-backup" "$legacy_db"
+
+sqlite3 "$invalid_db" "CREATE TABLE redirects (id INTEGER PRIMARY KEY, slug TEXT);"
 if "$root/scripts/check-sqlite-backup" "$invalid_db" >/dev/null 2>&1; then
 	printf 'backup without required columns passed validation\n' >&2
+	exit 1
+fi
+
+sqlite3 "$invalid_null_db" "CREATE TABLE redirects (id INTEGER PRIMARY KEY, slug TEXT, url TEXT); INSERT INTO redirects (slug, url) VALUES (NULL, 'https://example.com');"
+if "$root/scripts/check-sqlite-backup" "$invalid_null_db" >/dev/null 2>&1; then
+	printf 'legacy backup with null data passed validation\n' >&2
+	exit 1
+fi
+
+sqlite3 "$invalid_duplicate_db" "CREATE TABLE redirects (id INTEGER PRIMARY KEY, slug TEXT, url TEXT); INSERT INTO redirects (slug, url) VALUES ('known', 'https://example.com/one'), ('KNOWN', 'https://example.com/two');"
+if "$root/scripts/check-sqlite-backup" "$invalid_duplicate_db" >/dev/null 2>&1; then
+	printf 'legacy backup with conflicting slugs passed validation\n' >&2
+	exit 1
+fi
+
+sqlite3 "$invalid_current_db" "CREATE TABLE redirects (id INTEGER, slug TEXT NOT NULL, url TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL); PRAGMA user_version = 1;"
+if "$root/scripts/check-sqlite-backup" "$invalid_current_db" >/dev/null 2>&1; then
+	printf 'current-version backup without declared constraints passed validation\n' >&2
 	exit 1
 fi
 

@@ -16,12 +16,40 @@ if [ ! -f "$backup" ]; then
 	exit 1
 fi
 
-result=$(sqlite3 -readonly "$backup" "PRAGMA quick_check; SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = 'redirects'; SELECT count(*) FROM pragma_table_info('redirects') WHERE name IN ('slug', 'url');")
-if [ "$result" != "ok
-1
-2" ]; then
+quick_check=$(sqlite3 -readonly "$backup" "PRAGMA quick_check;")
+table_count=$(sqlite3 -readonly "$backup" "SELECT count(*) FROM sqlite_schema WHERE type = 'table' AND name = 'redirects';")
+version=$(sqlite3 -readonly "$backup" "PRAGMA user_version;")
+if [ "$quick_check" != "ok" ] || [ "$table_count" != "1" ]; then
 	printf 'backup validation failed\n' >&2
 	exit 1
 fi
 
-printf 'backup is valid\n'
+case "$version" in
+	0)
+		columns=$(sqlite3 -readonly "$backup" "SELECT count(*) FROM pragma_table_info('redirects') WHERE name IN ('id', 'slug', 'url');")
+		invalid_rows=$(sqlite3 -readonly "$backup" "SELECT count(*) FROM redirects WHERE slug IS NULL OR url IS NULL;")
+		conflicts=$(sqlite3 -readonly "$backup" "SELECT count(*) FROM (SELECT slug COLLATE NOCASE FROM redirects WHERE slug IS NOT NULL GROUP BY slug COLLATE NOCASE HAVING count(*) > 1);")
+		if [ "$columns" != "3" ] || [ "$invalid_rows" != "0" ] || [ "$conflicts" != "0" ]; then
+			printf 'backup validation failed\n' >&2
+			exit 1
+		fi
+		;;
+	1)
+		columns=$(sqlite3 -readonly "$backup" "SELECT count(*) FROM pragma_table_info('redirects') WHERE name IN ('id', 'slug', 'url', 'created_at', 'updated_at');")
+		required=$(sqlite3 -readonly "$backup" "SELECT count(*) FROM pragma_table_info('redirects') WHERE name IN ('slug', 'url', 'created_at', 'updated_at') AND \"notnull\" = 1;")
+		primary_key=$(sqlite3 -readonly "$backup" "SELECT count(*) FROM pragma_table_info('redirects') WHERE name = 'id' AND pk = 1;")
+		timestamp_defaults=$(sqlite3 -readonly "$backup" "SELECT count(*) FROM pragma_table_info('redirects') WHERE name IN ('created_at', 'updated_at') AND dflt_value = 'CURRENT_TIMESTAMP';")
+		unique_nocase_slug=$(sqlite3 -readonly "$backup" "SELECT count(*) FROM pragma_index_list('redirects') indexes JOIN pragma_index_xinfo(indexes.name) columns WHERE indexes.\"unique\" = 1 AND columns.name = 'slug' AND columns.coll = 'NOCASE' AND columns.key = 1;")
+		invalid_rows=$(sqlite3 -readonly "$backup" "SELECT count(*) FROM redirects WHERE slug IS NULL OR url IS NULL OR created_at IS NULL OR updated_at IS NULL;")
+		if [ "$columns" != "5" ] || [ "$required" != "4" ] || [ "$primary_key" != "1" ] || [ "$timestamp_defaults" != "2" ] || [ "$unique_nocase_slug" != "1" ] || [ "$invalid_rows" != "0" ]; then
+			printf 'backup validation failed\n' >&2
+			exit 1
+		fi
+		;;
+	*)
+		printf 'unsupported schema version: %s\n' "$version" >&2
+		exit 1
+		;;
+esac
+
+printf 'backup is valid (schema version %s)\n' "$version"

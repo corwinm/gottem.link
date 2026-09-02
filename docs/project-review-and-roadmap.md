@@ -12,16 +12,16 @@
 
 ## Current status
 
-Updated against `main` at `3881584` on 2026-09-02.
+Updated against `main` at `4751376` on 2026-09-02.
 
 - **Complete:** Go 1.27 is aligned across local, CI, Docker, and Fly builds; `govulncheck` is clean.
 - **Complete:** configuration is parsed once, the configured database is injected into the router, and redirect behavior is covered for found, missing, and database-error cases.
 - **Complete:** found slugs return HTTP 302 with `Location`; missing slugs return 404; operational database failures return 500.
-- **Blocked:** the transactional schema migration from PR #5 passed local and CI checks but prevented production startup. PRs #8 and #9 rolled it back while preserving the incident history. A future migration attempt requires a database backup and production-realistic LiteFS validation first.
+- **Complete:** schema version 1 is applied transactionally by an explicit candidate-only LiteFS migration command; serving remains non-writing, legacy rows are preserved, and incompatible or newer schemas fail closed.
 - **Complete:** PR #10 corrected Fly's primary region from `sea` to `sjc`, matching both deployed machines and volumes. This restored LiteFS primary election and public HTTP availability.
 - **Complete:** the root `AGENTS.md`, README, Makefile, and CI now define one local and remote quality contract.
 - **Complete:** deployment topology, container behavior, health/readiness, graceful shutdown, and backup/restore verification are documented and tested.
-- **Next:** create and validate a production backup, then redesign the schema-migration rollout around the verified LiteFS lifecycle.
+- **Next:** add a token-authenticated private management API for creating and listing redirects.
 
 The service is again reachable at `https://gottem.link`, but there is still no supported way to create or manage links.
 
@@ -161,7 +161,7 @@ Keep it short and update it as commands become real:
 
 **Done when:** a found slug returns the chosen 3xx status and `Location`, a missing slug returns 404, and operational failures return 500 without leaking internals.
 
-#### 0.3 Establish schema and migrations — Blocked after production rollback
+#### 0.3 Establish schema and migrations — Complete
 
 - Replace request-time table creation with startup migrations.
 - Make `slug` unique and non-null; make `url` non-null.
@@ -170,7 +170,7 @@ Keep it short and update it as commands become real:
 
 **Done when:** duplicate slugs fail predictably and a fresh database reaches the expected schema through a repeatable command/startup path.
 
-**Current note:** PR #5 implemented and tested this locally, but its production deployment exposed an unsafe startup path and was rolled back in PRs #8 and #9. Do not retry until the production database is backed up and the LiteFS execution path is reproduced outside production.
+**Current note:** the first rollout in PR #5 was reverted after an unsafe startup interaction. The retry separates migration and serving modes, runs migration only after LiteFS mounts and promotes a candidate, and is gated by a validated production backup plus the production-entrypoint container test.
 
 #### 0.4 Add the repository development contract — Complete
 
@@ -270,9 +270,9 @@ Avoid accounts, teams, billing, distributed caches, event pipelines, or multi-re
 1. **Complete:** Upgrade the pinned Go toolchain and verify the vulnerability scan.
 2. **Complete:** Add failing handler tests for DSN usage and redirect status.
 3. **Complete:** Inject a long-lived database into handlers and fix redirect responses.
-4. **Blocked:** Add a unique schema migration and database integration tests; retry only after backup and production-realistic LiteFS validation.
-5. **Next:** Add `AGENTS.md`, complete local commands, and CI quality gates.
-6. **In progress:** Document and regression-test the Fly deployment and backup path.
+4. **Complete:** Add a unique schema migration and database integration tests after backup and production-realistic LiteFS validation.
+5. **Complete:** Add `AGENTS.md`, complete local commands, and CI quality gates.
+6. **Complete:** Document and regression-test the Fly deployment and backup path.
 7. **Add token-authenticated create and list endpoints.**
 8. **Add update, disable, and delete endpoints.**
 9. **Add the JSON-capable management CLI.**
