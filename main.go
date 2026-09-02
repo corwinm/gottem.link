@@ -1,18 +1,25 @@
 package main
 
 import (
+	"corwinm/gottem.link/db"
 	"corwinm/gottem.link/routes"
-	"flag"
 	"log"
 	"net/http"
+	"os"
 )
 
 func main() {
-	router := routes.NewRouter()
-	port := flag.String("addr", ":8080", "http service address")
-	flag.String("dsn", "gottem.db", "Database file")
-	flag.Parse()
+	config, err := parseConfig(os.Args[1:])
+	if err != nil {
+		log.Fatal(err)
+	}
 
-	log.Println("Server is running on http://localhost" + *port)
-	log.Fatal(http.ListenAndServe(*port, router))
+	database, err := db.GetDB(config.dsn)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer database.Close()
+
+	log.Println("Server is listening on " + config.addr)
+	log.Fatal(http.ListenAndServe(config.addr, routes.NewRouter(database)))
 }
