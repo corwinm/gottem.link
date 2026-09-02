@@ -28,6 +28,22 @@ func Open(dsn string) (*DbWrapper, error) {
 		_ = database.Close()
 		return nil, fmt.Errorf("connect to database: %w", err)
 	}
+
+	var redirectsExist bool
+	if err := database.QueryRowContext(ctx, `
+		SELECT EXISTS (
+			SELECT 1 FROM sqlite_master
+			WHERE type = 'table' AND name = 'redirects'
+		)
+	`).Scan(&redirectsExist); err != nil {
+		_ = database.Close()
+		return nil, fmt.Errorf("inspect database schema: %w", err)
+	}
+	if !redirectsExist {
+		_ = database.Close()
+		return nil, fmt.Errorf("database schema is missing redirects table")
+	}
+
 	return &DbWrapper{database}, nil
 }
 
