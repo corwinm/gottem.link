@@ -10,6 +10,15 @@ type DbWrapper struct {
 	db *sql.DB
 }
 
+// Open returns a database handle without performing schema writes.
+func Open(dsn string) (*DbWrapper, error) {
+	database, err := sql.Open("sqlite3", dsn)
+	if err != nil {
+		return nil, err
+	}
+	return &DbWrapper{database}, nil
+}
+
 type TableMeta struct {
 	Table string
 }
