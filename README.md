@@ -1,2 +1,7 @@
 # gottem.link
-Url Shortener app for links I want to share
+
+URL shortener app for links I want to share.
+
+## Planning
+
+- [Project review and roadmap](docs/project-review-and-roadmap.md)
