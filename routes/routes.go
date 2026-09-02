@@ -1,13 +1,14 @@
 package routes
 
 import (
+	"corwinm/gottem.link/db"
 	"corwinm/gottem.link/handlers"
 	"net/http"
 )
 
-func NewRouter() *http.ServeMux {
+func NewRouter(database *db.DbWrapper) *http.ServeMux {
 	router := http.NewServeMux()
-	router.HandleFunc("/{slug}", handlers.RedirectHandler)
+	router.HandleFunc("/{slug}", handlers.RedirectHandler(database))
 	router.HandleFunc("/", handlers.HelloHandler)
 	return router
 }
