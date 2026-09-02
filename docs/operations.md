@@ -8,8 +8,8 @@ Machines may stop when idle. `primary_region` in `fly.toml` must match the machi
 
 ## Health
 
-- `GET /.well-known/healthz` returns 200 when the Go process can serve HTTP. Fly uses this for deployment health checks.
-- `GET /.well-known/readyz` returns 200 only when the `redirects` table can be queried; otherwise it returns 503.
+- `GET /.well-known/healthz` returns 200 when the Go process can serve HTTP.
+- `GET /.well-known/readyz` returns 200 only when the `redirects` table can be queried; otherwise it returns 503. Fly uses this to gate deployments.
 
 The multi-segment namespace keeps these operational routes from shadowing existing one-segment redirect slugs.
 

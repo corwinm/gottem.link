@@ -16,9 +16,10 @@ if [ ! -f "$backup" ]; then
 	exit 1
 fi
 
-result=$(sqlite3 -readonly "$backup" "PRAGMA quick_check; SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = 'redirects';")
+result=$(sqlite3 -readonly "$backup" "PRAGMA quick_check; SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = 'redirects'; SELECT count(*) FROM pragma_table_info('redirects') WHERE name IN ('slug', 'url');")
 if [ "$result" != "ok
-1" ]; then
+1
+2" ]; then
 	printf 'backup validation failed\n' >&2
 	exit 1
 fi

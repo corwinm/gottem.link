@@ -8,6 +8,7 @@ trap 'rm -rf "$tmp"' EXIT HUP INT TERM
 source_db="$tmp/source.db"
 backup_db="$tmp/backup.db"
 restored_db="$tmp/restored.db"
+invalid_db="$tmp/invalid.db"
 
 sqlite3 "$source_db" <<'SQL'
 CREATE TABLE redirects (id INTEGER PRIMARY KEY, slug TEXT, url TEXT);
@@ -19,5 +20,11 @@ cp "$backup_db" "$restored_db"
 
 result=$(sqlite3 "$restored_db" "SELECT slug || '|' || url FROM redirects;")
 test "$result" = "example|https://example.com"
+
+sqlite3 "$invalid_db" "CREATE TABLE redirects (id INTEGER PRIMARY KEY);"
+if "$root/scripts/check-sqlite-backup" "$invalid_db" >/dev/null 2>&1; then
+	printf 'backup without required columns passed validation\n' >&2
+	exit 1
+fi
 
 printf 'backup restore smoke test passed\n'

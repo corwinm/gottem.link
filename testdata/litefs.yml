@@ -1,0 +1,21 @@
+fuse:
+  dir: "/litefs"
+
+data:
+  dir: "/var/lib/litefs"
+
+exit-on-error: true
+
+proxy:
+  addr: ":8080"
+  target: "localhost:8081"
+  db: "gottem.db"
+
+exec:
+  - cmd: "run-app -addr :8081 -dsn /litefs/gottem.db"
+
+lease:
+  type: "static"
+  advertise-url: "http://localhost:20202"
+  candidate: true
+  promote: true
