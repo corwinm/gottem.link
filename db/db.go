@@ -3,9 +3,20 @@ package db
 import (
 	"context"
 	"database/sql"
+	"fmt"
 
 	_ "github.com/mattn/go-sqlite3"
 )
+
+const currentSchemaVersion = 1
+
+const redirectsSchema = `(
+	id INTEGER PRIMARY KEY,
+	slug TEXT NOT NULL COLLATE NOCASE UNIQUE,
+	url TEXT NOT NULL,
+	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+)`
 
 type DbWrapper struct {
 	db *sql.DB
@@ -16,37 +27,88 @@ type DbWrapper struct {
 func Open(dsn string) (*DbWrapper, error) {
 	database, err := sql.Open("sqlite3", dsn)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("open database: %w", err)
 	}
 	return &DbWrapper{database}, nil
 }
 
-type TableMeta struct {
-	Table string
+// Migrate upgrades a database to the current schema and closes it.
+func Migrate(dsn string) error {
+	database, err := sql.Open("sqlite3", dsn)
+	if err != nil {
+		return fmt.Errorf("open database: %w", err)
+	}
+	defer database.Close()
+
+	if err := migrate(database); err != nil {
+		return fmt.Errorf("migrate database: %w", err)
+	}
+	return nil
 }
 
-// GetDB returns a new instance of sql.DB initialized with a database connection
+// GetDB opens a database and migrates it to the current schema.
+// It is retained for callers that need an initialized database handle.
 func GetDB(dsn string) (*DbWrapper, error) {
-	db, err := sql.Open("sqlite3", dsn)
-	if err != nil {
+	if err := Migrate(dsn); err != nil {
 		return nil, err
 	}
-
-	err = ensureTableExists(db, "redirects", TableMeta{Table: "(id INTEGER PRIMARY KEY, slug TEXT, url TEXT)"})
-	if err != nil {
-		return nil, err
-	}
-
-	return &DbWrapper{db}, nil
+	return Open(dsn)
 }
 
-// EnsureTableExists sets up a table if it doesn't exist
-func ensureTableExists(dbWrapper *sql.DB, table string, tableMeta TableMeta) error {
-	// If table does not exist, create it
-	sqlStatement := `CREATE TABLE IF NOT EXISTS ` + table + ` ` + tableMeta.Table
-	_, err := dbWrapper.Exec(sqlStatement)
+func migrate(database *sql.DB) error {
+	var version int
+	if err := database.QueryRow("PRAGMA user_version").Scan(&version); err != nil {
+		return fmt.Errorf("read schema version: %w", err)
+	}
+	if version > currentSchemaVersion {
+		return fmt.Errorf("database schema version %d is newer than supported version %d", version, currentSchemaVersion)
+	}
+	if version == currentSchemaVersion {
+		return nil
+	}
+
+	tx, err := database.Begin()
 	if err != nil {
-		return err
+		return fmt.Errorf("begin migration: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	var redirectsExist bool
+	if err := tx.QueryRow(`
+		SELECT EXISTS (
+			SELECT 1 FROM sqlite_schema
+			WHERE type = 'table' AND name = 'redirects'
+		)
+	`).Scan(&redirectsExist); err != nil {
+		return fmt.Errorf("inspect legacy schema: %w", err)
+	}
+
+	if redirectsExist {
+		if _, err := tx.Exec("CREATE TABLE redirects_migration " + redirectsSchema); err != nil {
+			return fmt.Errorf("create migrated redirects table: %w", err)
+		}
+		if _, err := tx.Exec(`
+			INSERT INTO redirects_migration (id, slug, url, created_at, updated_at)
+			SELECT id, slug, url, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+			FROM redirects
+		`); err != nil {
+			return fmt.Errorf("copy legacy redirects: %w", err)
+		}
+		if _, err := tx.Exec("DROP TABLE redirects"); err != nil {
+			return fmt.Errorf("drop legacy redirects table: %w", err)
+		}
+		if _, err := tx.Exec("ALTER TABLE redirects_migration RENAME TO redirects"); err != nil {
+			return fmt.Errorf("activate migrated redirects table: %w", err)
+		}
+	} else if _, err := tx.Exec("CREATE TABLE redirects " + redirectsSchema); err != nil {
+		return fmt.Errorf("create redirects table: %w", err)
+	}
+
+	if _, err := tx.Exec("PRAGMA user_version = 1"); err != nil {
+		return fmt.Errorf("record schema version: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit migration: %w", err)
 	}
 	return nil
 }
@@ -55,17 +117,17 @@ func (dbWrapper *DbWrapper) Close() {
 	dbWrapper.db.Close()
 }
 
-// Exec a SQL statement
+// Exec a SQL statement.
 func (db *DbWrapper) Exec(query string, args ...interface{}) (sql.Result, error) {
 	return db.db.Exec(query, args...)
 }
 
-// Query a SQL statement
+// Query a SQL statement.
 func (db *DbWrapper) Query(query string, args ...interface{}) (*sql.Rows, error) {
 	return db.db.Query(query, args...)
 }
 
-// QueryRow a SQL statement
+// QueryRow queries a single row.
 func (db *DbWrapper) QueryRow(query string, args ...interface{}) *sql.Row {
 	return db.db.QueryRow(query, args...)
 }

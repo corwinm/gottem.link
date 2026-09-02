@@ -23,6 +23,13 @@ func main() {
 		log.Fatal(err)
 	}
 
+	if config.migrateOnly {
+		if err := db.Migrate(config.dsn); err != nil {
+			log.Fatal(err)
+		}
+		return
+	}
+
 	database, err := db.Open(config.dsn)
 	if err != nil {
 		log.Fatal(err)

@@ -9,7 +9,7 @@ import (
 )
 
 func TestParseConfigUsesNamedFlags(t *testing.T) {
-	config, err := parseConfig([]string{"-addr", ":9090", "-dsn", "/tmp/custom.db"})
+	config, err := parseConfig([]string{"-addr", ":9090", "-dsn", "/tmp/custom.db", "-migrate-only"})
 	if err != nil {
 		t.Fatalf("parseConfig returned an error: %v", err)
 	}
@@ -19,6 +19,9 @@ func TestParseConfigUsesNamedFlags(t *testing.T) {
 	}
 	if config.dsn != "/tmp/custom.db" {
 		t.Errorf("dsn = %q, want %q", config.dsn, "/tmp/custom.db")
+	}
+	if !config.migrateOnly {
+		t.Error("migrateOnly = false, want true")
 	}
 }
 

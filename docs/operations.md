@@ -13,6 +13,14 @@ Machines may stop when idle. `primary_region` in `fly.toml` must match the machi
 
 The multi-segment namespace keeps these operational routes from shadowing existing one-segment redirect slugs.
 
+## Schema migrations
+
+`run-app -migrate-only -dsn PATH` is the only production schema-writing mode. LiteFS runs it only on candidate nodes after mount and synchronization; `lease.promote: true` makes that candidate the writer before the command runs. Normal server startup uses `db.Open`, which does not connect, create tables, or migrate.
+
+Schema version 1 requires case-insensitively unique, non-null slugs; non-null destinations; and creation/update timestamps. Migration from the legacy version-0 table is transactional, preserves IDs and destinations, and fails without changing the original database when legacy rows violate the new constraints. Versions newer than the binary supports are rejected.
+
+Before merging a schema change, export and validate a production backup, run `make container-test`, and confirm that live machine/volume regions still match `primary_region`. After deployment, verify schema version, row count, readiness, and known redirects.
+
 ## Deploy and rollback
 
 Pull requests run `make check` and the production-image smoke test. A merge to `main` deploys only after both pass. Verify the Actions run, `fly status -a gottem-link`, `/.well-known/healthz`, and `/.well-known/readyz` after deployment.
@@ -39,7 +47,7 @@ Fly takes daily volume snapshots and currently retains them for five days. Befor
    scripts/check-sqlite-backup ./gottem-backup.db
    ```
 
-4. Store the backup outside the repository. Remove the remote temporary file after confirming the stored copy.
+4. Store the backup outside the repository. The validator accepts the legacy version-0 schema and the current version-1 schema, while rejecting unknown versions or missing required columns. Remove the remote temporary file after confirming the stored copy.
 
 ## Restore
 

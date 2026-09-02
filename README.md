@@ -24,7 +24,7 @@ go run . -addr :3000 -dsn /path/to/gottem.db
 
 ## Deployment
 
-Merges to `main` deploy `gottem-link` through the `Fly Deploy` GitHub environment. Fly runs two machines in `sjc`; each has a LiteFS volume, and LiteFS proxies public traffic to the Go server.
+Merges to `main` deploy `gottem-link` through the `Fly Deploy` GitHub environment. Fly runs two machines in `sjc`; each has a LiteFS volume, and LiteFS proxies public traffic to the Go server. On candidate startup, LiteFS promotes the node, runs `run-app -migrate-only`, and only then starts the non-writing server mode on every node.
 
 - `make container-test` builds the production image and exercises its LiteFS entrypoint under Docker.
 - `/.well-known/healthz` reports process health; `/.well-known/readyz` verifies database readiness.
