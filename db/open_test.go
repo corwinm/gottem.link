@@ -50,6 +50,25 @@ func TestReadyRequiresRedirectsTable(t *testing.T) {
 	}
 }
 
+func TestReadyRejectsOutdatedSchema(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "gottem.db")
+	database, err := db.GetDB(path)
+	if err != nil {
+		t.Fatalf("initialize database: %v", err)
+	}
+	if _, err := database.Exec(`PRAGMA user_version = 1`); err != nil {
+		t.Fatalf("set outdated schema version: %v", err)
+	}
+	if _, err := database.Exec("ALTER TABLE redirects DROP COLUMN disabled_at"); err != nil {
+		t.Fatalf("restore version-one schema: %v", err)
+	}
+
+	if err := database.Ready(context.Background()); err == nil {
+		t.Fatal("Ready returned nil for an outdated schema")
+	}
+	database.Close()
+}
+
 func TestReadyAcceptsInitializedDatabase(t *testing.T) {
 	database, err := db.GetDB(filepath.Join(t.TempDir(), "gottem.db"))
 	if err != nil {

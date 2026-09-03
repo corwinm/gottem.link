@@ -23,8 +23,8 @@ func TestMigrateCreatesCurrentSchema(t *testing.T) {
 	if err := database.QueryRow("PRAGMA user_version").Scan(&version); err != nil {
 		t.Fatalf("query schema version: %v", err)
 	}
-	if version != 1 {
-		t.Fatalf("schema version = %d, want 1", version)
+	if version != 2 {
+		t.Fatalf("schema version = %d, want 2", version)
 	}
 
 	columns := map[string]struct {
@@ -66,6 +66,11 @@ func TestMigrateCreatesCurrentSchema(t *testing.T) {
 		if !columns[name].defaultValue.Valid || !strings.Contains(columns[name].defaultValue.String, "CURRENT_TIMESTAMP") {
 			t.Errorf("redirects.%s default = %q, want CURRENT_TIMESTAMP", name, columns[name].defaultValue.String)
 		}
+	}
+	if _, ok := columns["disabled_at"]; !ok {
+		t.Error("missing redirects.disabled_at")
+	} else if columns["disabled_at"].notNull != 0 {
+		t.Error("redirects.disabled_at must be nullable")
 	}
 }
 
@@ -176,10 +181,47 @@ func TestMigrateRollsBackConflictingLegacyData(t *testing.T) {
 	}
 }
 
+func TestMigrateUpgradesVersionOneWithoutChangingRedirects(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "gottem.db")
+	database := openSQLite(t, path)
+	mustExec(t, database, `
+		CREATE TABLE redirects (
+			id INTEGER PRIMARY KEY,
+			slug TEXT NOT NULL COLLATE NOCASE UNIQUE,
+			url TEXT NOT NULL,
+			created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+		)
+	`)
+	mustExec(t, database, `INSERT INTO redirects (id, slug, url) VALUES (42, 'known', 'https://example.com')`)
+	mustExec(t, database, `PRAGMA user_version = 1`)
+	if err := database.Close(); err != nil {
+		t.Fatalf("close version-one database: %v", err)
+	}
+
+	if err := db.Migrate(path); err != nil {
+		t.Fatalf("migrate version-one database: %v", err)
+	}
+	after := openSQLite(t, path)
+	t.Cleanup(func() { _ = after.Close() })
+
+	var version, id int
+	var disabledAt sql.NullString
+	if err := after.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil {
+		t.Fatalf("query migrated version: %v", err)
+	}
+	if err := after.QueryRow(`SELECT id, disabled_at FROM redirects WHERE slug = 'known'`).Scan(&id, &disabledAt); err != nil {
+		t.Fatalf("query migrated redirect: %v", err)
+	}
+	if version != 2 || id != 42 || disabledAt.Valid {
+		t.Fatalf("version/id/disabled_at = %d/%d/%v, want 2/42/null", version, id, disabledAt)
+	}
+}
+
 func TestMigrateRejectsNewerSchemaVersion(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "gottem.db")
 	database := openSQLite(t, path)
-	mustExec(t, database, `PRAGMA user_version = 2`)
+	mustExec(t, database, `PRAGMA user_version = 3`)
 	if err := database.Close(); err != nil {
 		t.Fatalf("close newer database: %v", err)
 	}
