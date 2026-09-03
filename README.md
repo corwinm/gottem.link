@@ -18,6 +18,8 @@ The local server listens on `:8080` and stores data in `./gottem.db`. Override e
 go run . -addr :3000 -dsn /path/to/gottem.db
 ```
 
+Set `GOTTEM_MANAGEMENT_TOKEN` to enable the private JSON management API. Without it, `/api/` returns 404.
+
 ## Checks
 
 `make check` runs formatting, module tidiness, tests, race tests, vet, `govulncheck`, and a build. CI runs the same command for pull requests and `main`.

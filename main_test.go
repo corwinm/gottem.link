@@ -9,6 +9,7 @@ import (
 )
 
 func TestParseConfigUsesNamedFlags(t *testing.T) {
+	t.Setenv("GOTTEM_MANAGEMENT_TOKEN", "test-management-token")
 	config, err := parseConfig([]string{"-addr", ":9090", "-dsn", "/tmp/custom.db", "-migrate-only"})
 	if err != nil {
 		t.Fatalf("parseConfig returned an error: %v", err)
@@ -22,6 +23,9 @@ func TestParseConfigUsesNamedFlags(t *testing.T) {
 	}
 	if !config.migrateOnly {
 		t.Error("migrateOnly = false, want true")
+	}
+	if config.managementToken != "test-management-token" {
+		t.Errorf("managementToken was not read from GOTTEM_MANAGEMENT_TOKEN")
 	}
 }
 

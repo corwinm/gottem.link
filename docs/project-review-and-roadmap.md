@@ -12,18 +12,19 @@
 
 ## Current status
 
-Updated against `main` at `4751376` on 2026-09-02.
+Updated against `main` at `1de1310` on 2026-09-02.
 
 - **Complete:** Go 1.27 is aligned across local, CI, Docker, and Fly builds; `govulncheck` is clean.
 - **Complete:** configuration is parsed once, the configured database is injected into the router, and redirect behavior is covered for found, missing, and database-error cases.
 - **Complete:** found slugs return HTTP 302 with `Location`; missing slugs return 404; operational database failures return 500.
-- **Complete:** schema version 1 is applied transactionally by an explicit candidate-only LiteFS migration command; serving remains non-writing, legacy rows are preserved, and incompatible or newer schemas fail closed.
+- **Complete:** schema version 2 is applied transactionally by an explicit candidate-only LiteFS migration command; serving remains non-writing, legacy rows are preserved, and incompatible or newer schemas fail closed.
 - **Complete:** PR #10 corrected Fly's primary region from `sea` to `sjc`, matching both deployed machines and volumes. This restored LiteFS primary election and public HTTP availability.
 - **Complete:** the root `AGENTS.md`, README, Makefile, and CI now define one local and remote quality contract.
 - **Complete:** deployment topology, container behavior, health/readiness, graceful shutdown, and backup/restore verification are documented and tested.
-- **Next:** add a token-authenticated private management API for creating and listing redirects.
+- **Complete:** the bearer-token-protected management API creates, lists, inspects, updates, disables, and deletes redirects; it is unavailable when no token is configured.
+- **Next:** define strict destination and slug validation plus generated-slug collision handling.
 
-The service is again reachable at `https://gottem.link`, but there is still no supported way to create or manage links.
+The service is reachable at `https://gottem.link`, and authenticated management no longer requires direct database access.
 
 ## Verified current state
 
@@ -193,7 +194,7 @@ Keep it short and update it as commands become real:
 
 ### Milestone 1 — Personal URL-shortener MVP
 
-#### 1.1 Authenticated management API
+#### 1.1 Authenticated management API — Complete
 
 - Add token-authenticated endpoints to create, list, inspect, update, disable, and delete redirects.
 - Keep public redirects unauthenticated; keep all management routes private by default.
@@ -273,8 +274,8 @@ Avoid accounts, teams, billing, distributed caches, event pipelines, or multi-re
 4. **Complete:** Add a unique schema migration and database integration tests after backup and production-realistic LiteFS validation.
 5. **Complete:** Add `AGENTS.md`, complete local commands, and CI quality gates.
 6. **Complete:** Document and regression-test the Fly deployment and backup path.
-7. **Add token-authenticated create and list endpoints.**
-8. **Add update, disable, and delete endpoints.**
+7. **Complete:** Add token-authenticated create and list endpoints.
+8. **Complete:** Add inspect, update, disable, and delete endpoints.
 9. **Add the JSON-capable management CLI.**
 10. **Add dry-run import/export and restore verification.**
 11. **Add a minimal private admin UI.**

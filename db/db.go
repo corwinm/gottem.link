@@ -8,9 +8,9 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
-const currentSchemaVersion = 1
+const currentSchemaVersion = 2
 
-const redirectsSchema = `(
+const redirectsV1Schema = `(
 	id INTEGER PRIMARY KEY,
 	slug TEXT NOT NULL COLLATE NOCASE UNIQUE,
 	url TEXT NOT NULL,
@@ -63,13 +63,27 @@ func migrate(database *sql.DB) error {
 	if version > currentSchemaVersion {
 		return fmt.Errorf("database schema version %d is newer than supported version %d", version, currentSchemaVersion)
 	}
-	if version == currentSchemaVersion {
-		return nil
-	}
 
+	for version < currentSchemaVersion {
+		var err error
+		switch version {
+		case 0:
+			err = migrateToVersion1(database)
+		case 1:
+			err = migrateToVersion2(database)
+		}
+		if err != nil {
+			return err
+		}
+		version++
+	}
+	return nil
+}
+
+func migrateToVersion1(database *sql.DB) error {
 	tx, err := database.Begin()
 	if err != nil {
-		return fmt.Errorf("begin migration: %w", err)
+		return fmt.Errorf("begin version 1 migration: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
 
@@ -84,7 +98,7 @@ func migrate(database *sql.DB) error {
 	}
 
 	if redirectsExist {
-		if _, err := tx.Exec("CREATE TABLE redirects_migration " + redirectsSchema); err != nil {
+		if _, err := tx.Exec("CREATE TABLE redirects_migration " + redirectsV1Schema); err != nil {
 			return fmt.Errorf("create migrated redirects table: %w", err)
 		}
 		if _, err := tx.Exec(`
@@ -100,15 +114,34 @@ func migrate(database *sql.DB) error {
 		if _, err := tx.Exec("ALTER TABLE redirects_migration RENAME TO redirects"); err != nil {
 			return fmt.Errorf("activate migrated redirects table: %w", err)
 		}
-	} else if _, err := tx.Exec("CREATE TABLE redirects " + redirectsSchema); err != nil {
+	} else if _, err := tx.Exec("CREATE TABLE redirects " + redirectsV1Schema); err != nil {
 		return fmt.Errorf("create redirects table: %w", err)
 	}
 
 	if _, err := tx.Exec("PRAGMA user_version = 1"); err != nil {
-		return fmt.Errorf("record schema version: %w", err)
+		return fmt.Errorf("record schema version 1: %w", err)
 	}
 	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("commit migration: %w", err)
+		return fmt.Errorf("commit version 1 migration: %w", err)
+	}
+	return nil
+}
+
+func migrateToVersion2(database *sql.DB) error {
+	tx, err := database.Begin()
+	if err != nil {
+		return fmt.Errorf("begin version 2 migration: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if _, err := tx.Exec("ALTER TABLE redirects ADD COLUMN disabled_at TEXT"); err != nil {
+		return fmt.Errorf("add redirects.disabled_at: %w", err)
+	}
+	if _, err := tx.Exec("PRAGMA user_version = 2"); err != nil {
+		return fmt.Errorf("record schema version 2: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit version 2 migration: %w", err)
 	}
 	return nil
 }
@@ -133,7 +166,14 @@ func (db *DbWrapper) QueryRow(query string, args ...interface{}) *sql.Row {
 }
 
 func (db *DbWrapper) Ready(ctx context.Context) error {
-	rows, err := db.db.QueryContext(ctx, "SELECT 1 FROM redirects LIMIT 0")
+	var version int
+	if err := db.db.QueryRowContext(ctx, "PRAGMA user_version").Scan(&version); err != nil {
+		return err
+	}
+	if version != currentSchemaVersion {
+		return fmt.Errorf("database schema version %d, want %d", version, currentSchemaVersion)
+	}
+	rows, err := db.db.QueryContext(ctx, "SELECT disabled_at FROM redirects LIMIT 0")
 	if err != nil {
 		return err
 	}
@@ -142,25 +182,9 @@ func (db *DbWrapper) Ready(ctx context.Context) error {
 
 func (db *DbWrapper) QuerySlug(slug string) (string, error) {
 	var url string
-	err := db.QueryRow("SELECT url FROM redirects WHERE slug = ?", slug).Scan(&url)
+	err := db.QueryRow("SELECT url FROM redirects WHERE slug = ? AND disabled_at IS NULL", slug).Scan(&url)
 	if err != nil {
 		return "", err
 	}
 	return url, nil
-}
-
-func (db *DbWrapper) InsertRedirect(slug, url string) error {
-	_, err := db.Exec("INSERT INTO redirects (slug, url) VALUES (?, ?)", slug, url)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-func (db *DbWrapper) DeleteRedirect(slug string) error {
-	_, err := db.Exec("DELETE FROM redirects WHERE slug = ?", slug)
-	if err != nil {
-		return err
-	}
-	return nil
 }

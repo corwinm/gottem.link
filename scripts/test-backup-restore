@@ -12,7 +12,9 @@ invalid_db="$tmp/invalid.db"
 invalid_null_db="$tmp/invalid-null.db"
 invalid_duplicate_db="$tmp/invalid-duplicate.db"
 invalid_current_db="$tmp/invalid-current.db"
+invalid_v2_db="$tmp/invalid-v2.db"
 legacy_db="$tmp/legacy.db"
+version_one_db="$tmp/version-one.db"
 
 (cd "$root" && go run . -migrate-only -dsn "$source_db")
 sqlite3 "$source_db" "INSERT INTO redirects (slug, url) VALUES ('example', 'https://example.com');"
@@ -25,6 +27,9 @@ test "$result" = "example|https://example.com"
 
 sqlite3 "$legacy_db" "CREATE TABLE redirects (id INTEGER PRIMARY KEY, slug TEXT, url TEXT);"
 "$root/scripts/check-sqlite-backup" "$legacy_db"
+
+sqlite3 "$version_one_db" "CREATE TABLE redirects (id INTEGER PRIMARY KEY, slug TEXT NOT NULL COLLATE NOCASE UNIQUE, url TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP); PRAGMA user_version = 1;"
+"$root/scripts/check-sqlite-backup" "$version_one_db"
 
 sqlite3 "$invalid_db" "CREATE TABLE redirects (id INTEGER PRIMARY KEY, slug TEXT);"
 if "$root/scripts/check-sqlite-backup" "$invalid_db" >/dev/null 2>&1; then
@@ -41,6 +46,12 @@ fi
 sqlite3 "$invalid_duplicate_db" "CREATE TABLE redirects (id INTEGER PRIMARY KEY, slug TEXT, url TEXT); INSERT INTO redirects (slug, url) VALUES ('known', 'https://example.com/one'), ('KNOWN', 'https://example.com/two');"
 if "$root/scripts/check-sqlite-backup" "$invalid_duplicate_db" >/dev/null 2>&1; then
 	printf 'legacy backup with conflicting slugs passed validation\n' >&2
+	exit 1
+fi
+
+sqlite3 "$invalid_v2_db" "CREATE TABLE redirects (id INTEGER PRIMARY KEY, slug TEXT NOT NULL COLLATE NOCASE UNIQUE, url TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, disabled_at TEXT NOT NULL); PRAGMA user_version = 2;"
+if "$root/scripts/check-sqlite-backup" "$invalid_v2_db" >/dev/null 2>&1; then
+	printf 'version-2 backup with non-null disabled_at passed validation\n' >&2
 	exit 1
 fi
 

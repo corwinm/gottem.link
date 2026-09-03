@@ -37,7 +37,7 @@ func main() {
 	defer database.Close()
 
 	server := &http.Server{
-		Handler:           routes.NewRouter(database),
+		Handler:           routes.NewRouter(database, config.managementToken),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       10 * time.Second,
 		WriteTimeout:      30 * time.Second,
