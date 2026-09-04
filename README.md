@@ -18,7 +18,7 @@ The local server listens on `:8080` and stores data in `./gottem.db`. Override e
 go run . -addr :3000 -dsn /path/to/gottem.db
 ```
 
-Set `GOTTEM_MANAGEMENT_TOKEN` to enable the private JSON management API. Without it, `/api/` returns 404.
+Set `GOTTEM_MANAGEMENT_TOKEN` to enable the private JSON management API. Without it, `/api/` returns 404. Creating a redirect accepts an optional `slug`; omitted or `null` slugs are generated automatically, while custom slugs are validated and stored in lowercase.
 
 ## Checks
 

@@ -3,18 +3,21 @@ set -eu
 
 root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 image="gottem-link-smoke:${GITHUB_SHA:-local}"
+management_token=test-management-token
 container=
+temp_dir=$(mktemp -d "${TMPDIR:-/tmp}/gottem-link-smoke.XXXXXX")
 cleanup() {
 	if [ -n "$container" ]; then
 		docker rm -f "$container" >/dev/null 2>&1 || true
 	fi
 	docker image rm "$image" >/dev/null 2>&1 || true
+	rm -rf "$temp_dir"
 }
 trap cleanup EXIT HUP INT TERM
 
 docker build --build-arg GO_VERSION=1.27.0 -t "$image" "$root"
 container=$(docker run -d --privileged -p 127.0.0.1::8080 \
-	-e GOTTEM_MANAGEMENT_TOKEN=test-management-token \
+	-e GOTTEM_MANAGEMENT_TOKEN="$management_token" \
 	-v "$root/testdata/litefs.yml:/etc/litefs.yml:ro" "$image")
 address=$(docker port "$container" 8080/tcp)
 
@@ -39,18 +42,44 @@ unauthorized=$(curl --silent --output /dev/null --write-out '%{http_code}' \
 	--max-time 2 "http://$address/api/v1/redirects")
 test "$unauthorized" = "401"
 
-created=$(curl --fail --silent --show-error --max-time 2 \
-	--header 'Authorization: Bearer test-management-token' \
+created_body="$temp_dir/created.json"
+created_status=$(curl --silent --show-error --max-time 2 \
+	--output "$created_body" --write-out '%{http_code}|%{content_type}' \
+	--header "Authorization: Bearer $management_token" \
 	--header 'Content-Type: application/json' \
-	--data '{"slug":"healthz","url":"https://example.com/healthz"}' \
+	--data '{"url":"https://example.com/generated"}' \
 	"http://$address/api/v1/redirects")
-case "$created" in
-	*'"slug":"healthz"'*) ;;
-	*) printf 'management API returned unexpected response\n' >&2; exit 1 ;;
+test "$created_status" = "201|application/json"
+
+if command -v jq >/dev/null 2>&1; then
+	slug=$(jq -er '.slug | select(type == "string")' "$created_body")
+else
+	slug=$(sed -n 's/.*"slug":"\([^"]*\)".*/\1/p' "$created_body")
+fi
+case "$slug" in
+	???????) ;;
+	*) printf 'generated slug does not contain seven characters\n' >&2; exit 1 ;;
+esac
+case "$slug" in
+	*[!abcdefghijklmnopqrstuvwxyz234567]*) printf 'generated slug is not lowercase base32\n' >&2; exit 1 ;;
 esac
 
+test "$(docker exec "$container" sqlite3 -readonly /litefs/gottem.db \
+	"SELECT count(*) FROM redirects WHERE slug = '$slug' AND url = 'https://example.com/generated';")" = "1"
+
 redirect=$(curl --silent --show-error --max-time 2 --output /dev/null \
-	--write-out '%{http_code}|%{redirect_url}' "http://$address/healthz")
-test "$redirect" = "302|https://example.com/healthz"
+	--write-out '%{http_code}|%{redirect_url}' "http://$address/$slug")
+test "$redirect" = "302|https://example.com/generated"
+
+row_count=$(docker exec "$container" sqlite3 -readonly /litefs/gottem.db "SELECT count(*) FROM redirects;")
+invalid_body="$temp_dir/invalid.json"
+invalid_status=$(curl --silent --show-error --max-time 2 \
+	--output "$invalid_body" --write-out '%{http_code}' \
+	--header "Authorization: Bearer $management_token" \
+	--header 'Content-Type: application/json' \
+	--data '{"url":"ftp://example.com/file"}' \
+	"http://$address/api/v1/redirects")
+test "$invalid_status" = "400"
+test "$(docker exec "$container" sqlite3 -readonly /litefs/gottem.db "SELECT count(*) FROM redirects;")" = "$row_count"
 
 printf 'LiteFS container smoke test passed\n'
