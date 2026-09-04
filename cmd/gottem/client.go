@@ -62,6 +62,12 @@ func (client managementClient) list(ctx context.Context) ([]redirect, error) {
 	return result, err
 }
 
+func (client managementClient) export(ctx context.Context) (backup.Envelope, error) {
+	var result backup.Envelope
+	err := client.requestJSON(ctx, http.MethodGet, exportURL(client.baseURL), nil, http.StatusOK, &result)
+	return result, err
+}
+
 func (client managementClient) get(ctx context.Context, slug string) (redirect, error) {
 	var result redirect
 	err := client.requestJSON(ctx, http.MethodGet, redirectURL(client.baseURL, slug), nil, http.StatusOK, &result)
@@ -190,6 +196,12 @@ func sanitize(value string) string {
 func collectionURL(base *url.URL) *url.URL {
 	result := *base
 	result.Path = "/api/v1/redirects"
+	return &result
+}
+
+func exportURL(base *url.URL) *url.URL {
+	result := *base
+	result.Path = "/api/v1/exports"
 	return &result
 }
 

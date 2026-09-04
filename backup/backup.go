@@ -7,8 +7,6 @@ import (
 	"fmt"
 	"io"
 	"strings"
-
-	"corwinm/gottem.link/validation"
 )
 
 const (
@@ -76,26 +74,44 @@ func Decode(reader io.Reader) (Envelope, error) {
 
 func validate(envelope *Envelope) error {
 	issues := make([]Issue, 0)
-	seen := make(map[string]int)
+	seen := make(map[sqliteNOCASEKey]int)
 	for index := range envelope.Redirects {
 		redirect := &envelope.Redirects[index]
-		canonical, err := validation.ValidateSlug(redirect.Slug)
-		if err != nil {
-			issues = append(issues, Issue{Index: index, Field: "slug", Message: "invalid slug"})
+		if redirect.Slug == "" {
+			issues = append(issues, Issue{Index: index, Field: "slug", Message: "empty slug"})
 		} else {
-			redirect.Slug = canonical
-			if _, exists := seen[canonical]; exists {
+			key := sqliteNOCASE(redirect.Slug)
+			if _, exists := seen[key]; exists {
 				issues = append(issues, Issue{Index: index, Field: "slug", Message: "duplicate slug"})
 			} else {
-				seen[canonical] = index
+				seen[key] = index
 			}
 		}
-		if _, err := validation.ValidateDestination(redirect.URL); err != nil {
-			issues = append(issues, Issue{Index: index, Field: "url", Message: "invalid URL"})
+		if redirect.URL == "" {
+			issues = append(issues, Issue{Index: index, Field: "url", Message: "empty URL"})
 		}
 	}
 	if len(issues) > 0 {
 		return &ValidationError{Issues: issues}
 	}
 	return nil
+}
+
+type sqliteNOCASEKey struct {
+	prefix string
+	length int
+}
+
+func sqliteNOCASE(value string) sqliteNOCASEKey {
+	prefix := value
+	if nul := strings.IndexByte(prefix, 0); nul >= 0 {
+		prefix = prefix[:nul]
+	}
+	folded := []byte(prefix)
+	for index, character := range folded {
+		if character >= 'A' && character <= 'Z' {
+			folded[index] = character + ('a' - 'A')
+		}
+	}
+	return sqliteNOCASEKey{prefix: string(folded), length: len(value)}
 }

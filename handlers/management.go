@@ -155,6 +155,37 @@ func ManagementDisableHandler(database *db.DbWrapper) http.Handler {
 	})
 }
 
+func ManagementExportHandler(database *db.DbWrapper) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			w.Header().Set("Allow", "GET")
+			writeManagementError(w, http.StatusMethodNotAllowed, "method not allowed")
+			return
+		}
+		values, err := database.ListRedirects()
+		if err != nil {
+			writeManagementError(w, http.StatusInternalServerError, "internal server error")
+			return
+		}
+		redirects := make([]backup.Redirect, len(values))
+		for index, value := range values {
+			redirects[index] = backup.Redirect{Slug: value.Slug, URL: value.URL, Disabled: value.DisabledAt != nil}
+		}
+		payload, err := json.Marshal(backup.Envelope{Version: backup.Version, Redirects: redirects})
+		if err != nil {
+			writeManagementError(w, http.StatusInternalServerError, "internal server error")
+			return
+		}
+		if len(payload)+1 > backup.MaxBytes {
+			writeManagementError(w, http.StatusRequestEntityTooLarge, "export exceeds 1 MiB")
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(append(payload, '\n'))
+	})
+}
+
 func ManagementImportHandler(database *db.DbWrapper) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {

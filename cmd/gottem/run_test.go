@@ -123,7 +123,7 @@ func TestExportEmitsStableVersionOneEnvelope(t *testing.T) {
 	var got recordedRequest
 	client := clientFor(func(request *http.Request) (*http.Response, error) {
 		got = recordRequest(t, request)
-		return jsonResponse(http.StatusOK, "["+redirectJSON("active", "https://example.com/a", false)+","+redirectJSON("off", "https://example.com/o", true)+"]"), nil
+		return jsonResponse(http.StatusOK, `{"version":1,"redirects":[{"slug":"active","url":"https://example.com/a","disabled":false},{"slug":"off","url":"https://example.com/o","disabled":true}]}`), nil
 	})
 	code, stdout, stderr := runCLI(t, []string{"--base-url", "http://example.test", "export"}, client, nil)
 	if code != 0 || stderr != "" {
@@ -133,7 +133,7 @@ func TestExportEmitsStableVersionOneEnvelope(t *testing.T) {
 	if stdout != want {
 		t.Fatalf("stdout = %q, want %q", stdout, want)
 	}
-	assertRequest(t, got, http.MethodGet, "/api/v1/redirects", "", false)
+	assertRequest(t, got, http.MethodGet, "/api/v1/exports", "", false)
 }
 
 func TestImportDefaultsToDryRunAndApplyMustBeExplicit(t *testing.T) {
@@ -163,8 +163,7 @@ func TestImportDefaultsToDryRunAndApplyMustBeExplicit(t *testing.T) {
 			if code != 0 || stdout != test.wantOut || stderr != "" {
 				t.Fatalf("code/stdout/stderr = %d/%q/%q", code, stdout, stderr)
 			}
-			wantBody := `{"version":1,"redirects":[{"slug":"known","url":"https://example.com","disabled":false}]}`
-			assertRequest(t, got, http.MethodPost, test.requestURI, wantBody, true)
+			assertRequest(t, got, http.MethodPost, test.requestURI, payload, true)
 		})
 	}
 }
@@ -203,7 +202,7 @@ func TestImportReadsStdinAndJSONOutputIsUnchanged(t *testing.T) {
 func TestImportRejectsInvalidInputBeforeRequestWithoutLeakingURLs(t *testing.T) {
 	secret := "https://secret.example/private"
 	inputs := map[string]string{
-		"semantic issues": `{"version":1,"redirects":[{"slug":"bad slug","url":"` + secret + `","disabled":false},{"slug":"DUP","url":"bad","disabled":false},{"slug":"dup","url":"https://example.com","disabled":false}]}`,
+		"semantic issues": `{"version":1,"redirects":[{"slug":"","url":"` + secret + `","disabled":false},{"slug":"DUP","url":"","disabled":false},{"slug":"dup","url":"https://example.com","disabled":false}]}`,
 		"unknown field":   `{"version":1,"redirects":[],"extra":true}`,
 		"trailing JSON":   `{"version":1,"redirects":[]} {}`,
 		"oversized":       strings.Repeat(" ", (1<<20)+1),

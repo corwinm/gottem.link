@@ -91,7 +91,7 @@ func (db *DbWrapper) ImportRedirects(redirects []ImportRedirect) error {
 			return fmt.Errorf("check redirect import conflicts: %w", err)
 		}
 		if exists {
-			conflicts = append(conflicts, strings.ToLower(redirect.Slug))
+			conflicts = append(conflicts, sqliteNOCASEName(redirect.Slug))
 		}
 	}
 	if len(conflicts) > 0 {
@@ -105,7 +105,7 @@ func (db *DbWrapper) ImportRedirects(redirects []ImportRedirect) error {
 			VALUES (?, ?, CASE WHEN ? THEN CURRENT_TIMESTAMP ELSE NULL END)
 		`, redirect.Slug, redirect.URL, redirect.Disabled)
 		if isUniqueConstraint(err) {
-			return &SlugConflictsError{Slugs: []string{strings.ToLower(redirect.Slug)}}
+			return &SlugConflictsError{Slugs: []string{sqliteNOCASEName(redirect.Slug)}}
 		}
 		if err != nil {
 			return fmt.Errorf("import redirect: %w", err)
@@ -125,7 +125,7 @@ func (db *DbWrapper) RedirectImportConflicts(redirects []ImportRedirect) ([]stri
 			return nil, fmt.Errorf("check redirect import conflicts: %w", err)
 		}
 		if exists {
-			conflicts = append(conflicts, strings.ToLower(redirect.Slug))
+			conflicts = append(conflicts, sqliteNOCASEName(redirect.Slug))
 		}
 	}
 	sort.Strings(conflicts)
@@ -226,4 +226,14 @@ func scanRedirect(scanner redirectScanner) (Redirect, error) {
 func isUniqueConstraint(err error) bool {
 	var sqliteErr sqlite3.Error
 	return errors.As(err, &sqliteErr) && sqliteErr.ExtendedCode == sqlite3.ErrConstraintUnique
+}
+
+func sqliteNOCASEName(value string) string {
+	folded := []byte(value)
+	for index, character := range folded {
+		if character >= 'A' && character <= 'Z' {
+			folded[index] = character + ('a' - 'A')
+		}
+	}
+	return string(folded)
 }

@@ -19,6 +19,7 @@ Set `GOTTEM_MANAGEMENT_TOKEN` to enable the API. Every management request requir
 
 - `POST /api/v1/redirects` with `{"slug":"name","url":"https://example.com"}` creates a redirect.
 - `GET /api/v1/redirects` lists redirects, including disabled entries.
+- `GET /api/v1/exports` returns the compact versioned portable export.
 - `GET /api/v1/redirects/{slug}` inspects one redirect.
 - `PUT /api/v1/redirects/{slug}` with `{"url":"https://example.com/new"}` replaces its destination.
 - `POST /api/v1/redirects/{slug}/disable` disables public resolution.
@@ -55,7 +56,7 @@ gottem import redirects-v1.json
 gottem import --apply redirects-v1.json
 ```
 
-Use `-` instead of a filename to read from standard input. Import is transactional, rejects unsupported versions, unknown fields, invalid values, duplicate slugs, and existing slug conflicts, and preserves whether each redirect is active or disabled.
+Use `-` instead of a filename to read from standard input. Import is transactional, rejects unsupported versions, unknown fields, empty slugs or destinations, duplicate slugs under SQLite's ASCII-only `NOCASE` rules, and existing slug conflicts. As a restore format, it otherwise preserves legacy slug and destination values byte-for-byte, along with whether each redirect is active or disabled.
 
 ## Deploy and rollback
 

@@ -66,11 +66,11 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer, httpClient *h
 			err = writeList(stdout, command.json, values)
 		}
 	case "export":
-		values, requestErr := client.list(ctx)
+		envelope, requestErr := client.export(ctx)
 		if requestErr != nil {
 			err = requestErr
 		} else {
-			err = writeExport(stdout, values)
+			err = writeExport(stdout, envelope)
 		}
 	case "import":
 		var reader io.Reader = stdin
@@ -199,12 +199,8 @@ func writeList(writer io.Writer, jsonOutput bool, values []redirect) error {
 	return table.Flush()
 }
 
-func writeExport(writer io.Writer, values []redirect) error {
-	redirects := make([]backup.Redirect, len(values))
-	for index, value := range values {
-		redirects[index] = backup.Redirect{Slug: value.Slug, URL: value.URL, Disabled: value.DisabledAt != nil}
-	}
-	return writeJSON(writer, backup.Envelope{Version: backup.Version, Redirects: redirects})
+func writeExport(writer io.Writer, envelope backup.Envelope) error {
+	return writeJSON(writer, envelope)
 }
 
 func writeImport(writer io.Writer, jsonOutput, apply bool, value importResult) error {

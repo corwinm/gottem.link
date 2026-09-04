@@ -108,7 +108,7 @@ func TestManagementAPIRequiresAuthentication(t *testing.T) {
 	t.Cleanup(database.Close)
 	router := routes.NewRouter(database, testManagementToken)
 
-	for _, path := range []string{"/api/v1/redirects", "/api/v1/imports"} {
+	for _, path := range []string{"/api/v1/redirects", "/api/v1/imports", "/api/v1/exports"} {
 		for name, token := range map[string]string{"missing": "", "wrong": "wrong-token"} {
 			t.Run(path+" "+name, func(t *testing.T) {
 				response := managementRequest(t, router, http.MethodPost, path, `{}`, token)
@@ -119,7 +119,7 @@ func TestManagementAPIRequiresAuthentication(t *testing.T) {
 		}
 	}
 
-	for _, path := range []string{"/api/v1/redirects", "/api/v1/imports"} {
+	for _, path := range []string{"/api/v1/redirects", "/api/v1/imports", "/api/v1/exports"} {
 		response := managementRequest(t, routes.NewRouter(database, ""), http.MethodPost, path, `{}`, "anything")
 		if response.Code != http.StatusNotFound {
 			t.Fatalf("%s status = %d, want 404", path, response.Code)
@@ -179,6 +179,32 @@ func TestManagementAPIErrors(t *testing.T) {
 	duplicate := managementRequest(t, router, http.MethodPost, "/api/v1/redirects", `{"slug":"known","url":"https://example.com/two"}`, testManagementToken)
 	if duplicate.Code != http.StatusConflict {
 		t.Fatalf("duplicate create status/body = %d/%s, want 409", duplicate.Code, duplicate.Body.String())
+	}
+}
+
+func TestPortableExportEndpoint(t *testing.T) {
+	database, err := db.GetDB(filepath.Join(t.TempDir(), "gottem.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(database.Close)
+	if _, err := database.CreateRedirect("active", "https://example.com/a"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := database.CreateRedirect("off", "https://example.com/o"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := database.DisableRedirect("off"); err != nil {
+		t.Fatal(err)
+	}
+
+	response := managementRequest(t, routes.NewRouter(database, testManagementToken), http.MethodGet, "/api/v1/exports", "", testManagementToken)
+	if response.Code != http.StatusOK {
+		t.Fatalf("status/body = %d/%s", response.Code, response.Body.String())
+	}
+	want := `{"version":1,"redirects":[{"slug":"active","url":"https://example.com/a","disabled":false},{"slug":"off","url":"https://example.com/o","disabled":true}]}` + "\n"
+	if response.Body.String() != want {
+		t.Fatalf("body = %q, want %q", response.Body.String(), want)
 	}
 }
 
@@ -253,8 +279,8 @@ func TestBulkImportRejectsInvalidEnvelopesWithoutWrites(t *testing.T) {
 		"trailing JSON":       `{"version":1,"redirects":[]} {}`,
 		"unsupported version": `{"version":2,"redirects":[]}`,
 		"duplicate and fields": `{"version":1,"redirects":[` +
-			`{"slug":"bad slug","url":"` + secret + `","disabled":false},` +
-			`{"slug":"DUP","url":"bad","disabled":false},` +
+			`{"slug":"","url":"` + secret + `","disabled":false},` +
+			`{"slug":"DUP","url":"","disabled":false},` +
 			`{"slug":"dup","url":"https://example.com","disabled":false}]}`,
 		"oversized": strings.Repeat(" ", (1<<20)+1),
 	}

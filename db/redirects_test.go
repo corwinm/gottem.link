@@ -83,6 +83,27 @@ func TestCreateRedirectReturnsSlugConflict(t *testing.T) {
 	}
 }
 
+func TestImportConflictReportsPreserveNonASCIICase(t *testing.T) {
+	database, err := db.GetDB(filepath.Join(t.TempDir(), "gottem.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(database.Close)
+	if _, err := database.CreateRedirect("Ä", "one"); err != nil {
+		t.Fatal(err)
+	}
+	redirects := []db.ImportRedirect{{Slug: "Ä", URL: "two"}}
+
+	conflicts, err := database.RedirectImportConflicts(redirects)
+	if err != nil || !reflect.DeepEqual(conflicts, []string{"Ä"}) {
+		t.Fatalf("dry-run conflicts = %#v, %v", conflicts, err)
+	}
+	var conflictErr *db.SlugConflictsError
+	if err := database.ImportRedirects(redirects); !errors.As(err, &conflictErr) || !reflect.DeepEqual(conflictErr.Slugs, []string{"Ä"}) {
+		t.Fatalf("apply conflict = %#v, %v", conflictErr, err)
+	}
+}
+
 func TestRedirectMutationsReturnNotFound(t *testing.T) {
 	database, err := db.GetDB(filepath.Join(t.TempDir(), "gottem.db"))
 	if err != nil {
