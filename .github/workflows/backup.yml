@@ -1,0 +1,60 @@
+name: Encrypted Backup
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 9 * * *'
+
+concurrency:
+  group: encrypted-backup
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  backup:
+    name: Backup
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    environment: Backups
+    steps:
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+
+      - name: Set up Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: Install age
+        run: |
+          GOBIN="$RUNNER_TEMP/bin" go install filippo.io/age/cmd/age@v1.3.2
+
+      - name: Export and encrypt
+        env:
+          AGE_RECIPIENT: ${{ vars.GOTTEM_BACKUP_AGE_RECIPIENT }}
+          GOTTEM_MANAGEMENT_TOKEN: ${{ secrets.GOTTEM_BACKUP_TOKEN }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$AGE_RECIPIENT"
+          test -n "$GOTTEM_MANAGEMENT_TOKEN"
+          plaintext="$RUNNER_TEMP/redirects-v1.json"
+          ciphertext="$RUNNER_TEMP/gottem-redirects-${GITHUB_RUN_ID}.json.age"
+          trap 'rm -f "$plaintext"' EXIT
+          go build -o "$RUNNER_TEMP/gottem" ./cmd/gottem
+          "$RUNNER_TEMP/gottem" --base-url https://gottem.link export > "$plaintext"
+          "$RUNNER_TEMP/bin/age" -r "$AGE_RECIPIENT" -o "$ciphertext" "$plaintext"
+          test -s "$ciphertext"
+
+      - name: Upload encrypted backup
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: gottem-redirects-${{ github.run_id }}
+          path: ${{ runner.temp }}/gottem-redirects-${{ github.run_id }}.json.age
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
