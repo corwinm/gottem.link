@@ -24,7 +24,9 @@ Set `GOTTEM_MANAGEMENT_TOKEN` to enable the API. Every management request requir
 - `POST /api/v1/redirects/{slug}/disable` disables public resolution.
 - `DELETE /api/v1/redirects/{slug}` permanently removes it.
 
-Responses are JSON except successful deletion, which returns 204. Duplicate slugs return 409; missing redirects return 404. Keep the production token only in Fly secrets and a secure local credential store. Input validation and generated slugs are the next roadmap slice; until then this API is intended only for its trusted owner.
+Destinations must use `http` or `https` and be no more than 2048 bytes. URLs with credentials, invalid or empty hosts, or unsafe characters are rejected. Custom slugs are canonicalized to lowercase and must contain 1–64 ASCII letters or digits, with only single internal hyphens; `api` and the `.well-known` namespace are reserved. Omitting `slug` or setting it to `null` generates a seven-character slug, while an explicitly empty slug is invalid.
+
+Responses are JSON except successful deletion, which returns 204. Validation failures return 400 JSON with a field-specific `field` value; slug conflicts return 409; missing redirects return 404. Keep the production token only in Fly secrets and a secure local credential store.
 
 ## Schema migrations
 

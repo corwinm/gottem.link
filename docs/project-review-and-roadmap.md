@@ -12,7 +12,7 @@
 
 ## Current status
 
-Updated against `main` at `1de1310` on 2026-09-02.
+Updated against the milestone 1.2 implementation at `96bf96c` on 2026-09-03.
 
 - **Complete:** Go 1.27 is aligned across local, CI, Docker, and Fly builds; `govulncheck` is clean.
 - **Complete:** configuration is parsed once, the configured database is injected into the router, and redirect behavior is covered for found, missing, and database-error cases.
@@ -22,7 +22,8 @@ Updated against `main` at `1de1310` on 2026-09-02.
 - **Complete:** the root `AGENTS.md`, README, Makefile, and CI now define one local and remote quality contract.
 - **Complete:** deployment topology, container behavior, health/readiness, graceful shutdown, and backup/restore verification are documented and tested.
 - **Complete:** the bearer-token-protected management API creates, lists, inspects, updates, disables, and deletes redirects; it is unavailable when no token is configured.
-- **Next:** define strict destination and slug validation plus generated-slug collision handling.
+- **Complete:** management writes enforce destination and custom-slug validation, generate short slugs when requested, and retry generated-slug collisions safely.
+- **Next:** add the practical JSON-capable management client in milestone 1.3.
 
 The service is reachable at `https://gottem.link`, and authenticated management no longer requires direct database access.
 
@@ -202,7 +203,7 @@ Keep it short and update it as commands become real:
 
 **Done when:** unauthorized writes are rejected, authorized CRUD is covered by integration tests, and secrets are not logged.
 
-#### 1.2 URL and slug validation
+#### 1.2 URL and slug validation — Complete
 
 - Accept only explicitly supported destination schemes (`https`, and `http` only if intentionally allowed).
 - Reject credentials, control characters, empty hosts, oversized inputs, and reserved slugs.
@@ -211,7 +212,7 @@ Keep it short and update it as commands become real:
 
 **Done when:** validation and collision behavior are deterministic and covered by table-driven tests.
 
-#### 1.3 Practical management client
+#### 1.3 Practical management client — Next
 
 - Add a small CLI that uses the same management API for create/list/update/disable/delete.
 - Support machine-readable JSON output so Hermes, pi, Codex, and scripts can use it safely.
@@ -276,8 +277,9 @@ Avoid accounts, teams, billing, distributed caches, event pipelines, or multi-re
 6. **Complete:** Document and regression-test the Fly deployment and backup path.
 7. **Complete:** Add token-authenticated create and list endpoints.
 8. **Complete:** Add inspect, update, disable, and delete endpoints.
-9. **Add the JSON-capable management CLI.**
-10. **Add dry-run import/export and restore verification.**
-11. **Add a minimal private admin UI.**
+9. **Complete:** Add strict URL and slug validation plus generated slugs.
+10. **Add the JSON-capable management CLI.**
+11. **Add dry-run import/export and restore verification.**
+12. **Add a minimal private admin UI.**
 
 The first three issues may be grouped into one recovery PR only if the tests remain focused and the diff stays small. Later issues should generally be separate PRs.
