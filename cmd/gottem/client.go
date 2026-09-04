@@ -11,6 +11,8 @@ import (
 	"net/url"
 	"strings"
 	"unicode"
+
+	"corwinm/gottem.link/backup"
 )
 
 const maxResponseBodyBytes = 1 << 20
@@ -25,8 +27,14 @@ type redirect struct {
 }
 
 type apiError struct {
-	Error string `json:"error"`
-	Field string `json:"field"`
+	Error     string   `json:"error"`
+	Field     string   `json:"field"`
+	Conflicts []string `json:"conflicts"`
+}
+
+type importResult struct {
+	Total    int `json:"total"`
+	Imported int `json:"imported"`
 }
 
 type managementClient struct {
@@ -54,6 +62,18 @@ func (client managementClient) list(ctx context.Context) ([]redirect, error) {
 	return result, err
 }
 
+func (client managementClient) export(ctx context.Context) (backup.Envelope, error) {
+	var raw json.RawMessage
+	if err := client.requestJSON(ctx, http.MethodGet, exportURL(client.baseURL), nil, http.StatusOK, &raw); err != nil {
+		return backup.Envelope{}, err
+	}
+	result, err := backup.Decode(bytes.NewReader(raw))
+	if err != nil {
+		return backup.Envelope{}, errors.New("server returned invalid export")
+	}
+	return result, nil
+}
+
 func (client managementClient) get(ctx context.Context, slug string) (redirect, error) {
 	var result redirect
 	err := client.requestJSON(ctx, http.MethodGet, redirectURL(client.baseURL, slug), nil, http.StatusOK, &result)
@@ -76,6 +96,12 @@ func (client managementClient) disable(ctx context.Context, slug string) (redire
 
 func (client managementClient) delete(ctx context.Context, slug string) error {
 	return client.requestJSON(ctx, http.MethodDelete, redirectURL(client.baseURL, slug), nil, http.StatusNoContent, nil)
+}
+
+func (client managementClient) importRedirects(ctx context.Context, envelope backup.Envelope, dryRun bool) (importResult, error) {
+	var result importResult
+	err := client.requestJSON(ctx, http.MethodPost, importURL(client.baseURL, dryRun), envelope, http.StatusOK, &result)
+	return result, err
 }
 
 func (client managementClient) requestJSON(ctx context.Context, method string, target *url.URL, payload any, expectedStatus int, result any) error {
@@ -143,6 +169,9 @@ func responseError(response *http.Response, body []byte, token string) error {
 	}
 	var payload apiError
 	if json.Unmarshal(body, &payload) == nil && payload.Error != "" {
+		if len(payload.Conflicts) > 0 {
+			return fmt.Errorf("request failed: %s: %s: %s", status, payload.Error, strings.Join(payload.Conflicts, ", "))
+		}
 		if payload.Field != "" {
 			return fmt.Errorf("request failed: %s: %s (field: %s)", status, payload.Error, payload.Field)
 		}
@@ -176,6 +205,12 @@ func collectionURL(base *url.URL) *url.URL {
 	return &result
 }
 
+func exportURL(base *url.URL) *url.URL {
+	result := *base
+	result.Path = "/api/v1/exports"
+	return &result
+}
+
 func redirectURL(base *url.URL, slug string) *url.URL {
 	result := *base
 	result.Path = "/api/v1/redirects/" + slug
@@ -188,4 +223,13 @@ func disableURL(base *url.URL, slug string) *url.URL {
 	result.Path += "/disable"
 	result.RawPath += "/disable"
 	return result
+}
+
+func importURL(base *url.URL, dryRun bool) *url.URL {
+	result := *base
+	result.Path = "/api/v1/imports"
+	if dryRun {
+		result.RawQuery = "dry_run=true"
+	}
+	return &result
 }

@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"errors"
 	"path/filepath"
+	"reflect"
 	"testing"
 
 	"corwinm/gottem.link/db"
@@ -82,6 +83,27 @@ func TestCreateRedirectReturnsSlugConflict(t *testing.T) {
 	}
 }
 
+func TestImportConflictReportsPreserveNonASCIICase(t *testing.T) {
+	database, err := db.GetDB(filepath.Join(t.TempDir(), "gottem.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(database.Close)
+	if _, err := database.CreateRedirect("Ä", "one"); err != nil {
+		t.Fatal(err)
+	}
+	redirects := []db.ImportRedirect{{Slug: "Ä", URL: "two"}}
+
+	conflicts, err := database.RedirectImportConflicts(redirects)
+	if err != nil || !reflect.DeepEqual(conflicts, []string{"Ä"}) {
+		t.Fatalf("dry-run conflicts = %#v, %v", conflicts, err)
+	}
+	var conflictErr *db.SlugConflictsError
+	if err := database.ImportRedirects(redirects); !errors.As(err, &conflictErr) || !reflect.DeepEqual(conflictErr.Slugs, []string{"Ä"}) {
+		t.Fatalf("apply conflict = %#v, %v", conflictErr, err)
+	}
+}
+
 func TestRedirectMutationsReturnNotFound(t *testing.T) {
 	database, err := db.GetDB(filepath.Join(t.TempDir(), "gottem.db"))
 	if err != nil {
@@ -100,5 +122,86 @@ func TestRedirectMutationsReturnNotFound(t *testing.T) {
 	}
 	if err := database.DeleteRedirect("missing"); !errors.Is(err, db.ErrRedirectNotFound) {
 		t.Errorf("DeleteRedirect error = %v, want %v", err, db.ErrRedirectNotFound)
+	}
+}
+
+func TestImportRedirectsAtomicallyPreservesDisabledState(t *testing.T) {
+	database, err := db.GetDB(filepath.Join(t.TempDir(), "gottem.db"))
+	if err != nil {
+		t.Fatalf("initialize database: %v", err)
+	}
+	t.Cleanup(database.Close)
+
+	redirects := []db.ImportRedirect{
+		{Slug: "active", URL: "https://example.com/active"},
+		{Slug: "disabled", URL: "https://example.com/disabled", Disabled: true},
+	}
+	if err := database.ImportRedirects(redirects); err != nil {
+		t.Fatalf("import redirects: %v", err)
+	}
+	if destination, err := database.QuerySlug("active"); err != nil || destination != "https://example.com/active" {
+		t.Fatalf("active redirect = %q, %v", destination, err)
+	}
+	if _, err := database.QuerySlug("disabled"); !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("disabled redirect resolved with error %v", err)
+	}
+}
+
+func TestImportRedirectsRollsBackOnMidImportFailure(t *testing.T) {
+	database, err := db.GetDB(filepath.Join(t.TempDir(), "gottem.db"))
+	if err != nil {
+		t.Fatalf("initialize database: %v", err)
+	}
+	t.Cleanup(database.Close)
+	if _, err := database.Exec(`
+		CREATE TRIGGER reject_second_import
+		BEFORE INSERT ON redirects
+		WHEN NEW.slug = 'second'
+		BEGIN
+			SELECT RAISE(ABORT, 'forced import failure');
+		END
+	`); err != nil {
+		t.Fatalf("create failure trigger: %v", err)
+	}
+
+	err = database.ImportRedirects([]db.ImportRedirect{
+		{Slug: "first", URL: "https://example.com/first"},
+		{Slug: "second", URL: "https://example.com/second"},
+	})
+	if err == nil {
+		t.Fatal("import succeeded")
+	}
+	if _, err := database.GetRedirect("first"); !errors.Is(err, db.ErrRedirectNotFound) {
+		t.Fatalf("first redirect survived rollback: %v", err)
+	}
+}
+
+func TestImportRedirectsReportsSortedConflictsWithoutWrites(t *testing.T) {
+	database, err := db.GetDB(filepath.Join(t.TempDir(), "gottem.db"))
+	if err != nil {
+		t.Fatalf("initialize database: %v", err)
+	}
+	t.Cleanup(database.Close)
+	if _, err := database.CreateRedirect("zeta", "https://example.com/existing"); err != nil {
+		t.Fatalf("create existing redirect: %v", err)
+	}
+	if _, err := database.CreateRedirect("Alpha", "https://example.com/existing"); err != nil {
+		t.Fatalf("create existing redirect: %v", err)
+	}
+
+	err = database.ImportRedirects([]db.ImportRedirect{
+		{Slug: "ZETA", URL: "https://example.com/zeta"},
+		{Slug: "new", URL: "https://example.com/new"},
+		{Slug: "alpha", URL: "https://example.com/alpha"},
+	})
+	var conflict *db.SlugConflictsError
+	if !errors.As(err, &conflict) {
+		t.Fatalf("import error = %v, want slug conflicts", err)
+	}
+	if !reflect.DeepEqual(conflict.Slugs, []string{"alpha", "zeta"}) {
+		t.Fatalf("conflicts = %#v, want alpha/zeta", conflict.Slugs)
+	}
+	if _, err := database.GetRedirect("new"); !errors.Is(err, db.ErrRedirectNotFound) {
+		t.Fatalf("new redirect after rejected import error = %v", err)
 	}
 }

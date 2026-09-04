@@ -6,7 +6,9 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"unicode/utf8"
 
+	"corwinm/gottem.link/backup"
 	"corwinm/gottem.link/db"
 	"corwinm/gottem.link/validation"
 )
@@ -152,6 +154,129 @@ func ManagementDisableHandler(database *db.DbWrapper) http.Handler {
 		redirect, err := database.DisableRedirect(r.PathValue("slug"))
 		writeRedirectResult(w, redirect, err, http.StatusOK)
 	})
+}
+
+func ManagementExportHandler(database *db.DbWrapper) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			w.Header().Set("Allow", "GET")
+			writeManagementError(w, http.StatusMethodNotAllowed, "method not allowed")
+			return
+		}
+		values, err := database.ListRedirects()
+		if err != nil {
+			writeManagementError(w, http.StatusInternalServerError, "internal server error")
+			return
+		}
+		redirects := make([]backup.Redirect, len(values))
+		for index, value := range values {
+			if !utf8.ValidString(value.Slug) || !utf8.ValidString(value.URL) {
+				writeManagementError(w, http.StatusUnprocessableEntity, "export contains invalid UTF-8")
+				return
+			}
+			redirects[index] = backup.Redirect{Slug: value.Slug, URL: value.URL, Disabled: value.DisabledAt != nil}
+		}
+		payload, err := json.Marshal(backup.Envelope{Version: backup.Version, Redirects: redirects})
+		if err != nil {
+			writeManagementError(w, http.StatusInternalServerError, "internal server error")
+			return
+		}
+		if len(payload)+1 > backup.MaxBytes {
+			writeManagementError(w, http.StatusRequestEntityTooLarge, "export exceeds 1 MiB")
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(append(payload, '\n'))
+	})
+}
+
+func ManagementImportHandler(database *db.DbWrapper) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			w.Header().Set("Allow", "POST")
+			writeManagementError(w, http.StatusMethodNotAllowed, "method not allowed")
+			return
+		}
+		dryRun, err := parseDryRun(r)
+		if err != nil {
+			writeManagementError(w, http.StatusBadRequest, "invalid dry_run value")
+			return
+		}
+		envelope, err := backup.Decode(r.Body)
+		if err != nil {
+			var validationErr *backup.ValidationError
+			if errors.As(err, &validationErr) {
+				writeManagementJSON(w, http.StatusBadRequest, struct {
+					Error  string         `json:"error"`
+					Issues []backup.Issue `json:"issues"`
+				}{Error: "invalid redirects", Issues: validationErr.Issues})
+				return
+			}
+			writeManagementError(w, http.StatusBadRequest, "invalid import")
+			return
+		}
+
+		redirects := make([]db.ImportRedirect, len(envelope.Redirects))
+		for index, redirect := range envelope.Redirects {
+			redirects[index] = db.ImportRedirect{Slug: redirect.Slug, URL: redirect.URL, Disabled: redirect.Disabled}
+		}
+		if dryRun {
+			conflicts, err := database.RedirectImportConflicts(redirects)
+			if err != nil {
+				writeManagementError(w, http.StatusInternalServerError, "internal server error")
+				return
+			}
+			if len(conflicts) > 0 {
+				writeImportConflicts(w, conflicts)
+				return
+			}
+			writeImportResult(w, len(redirects), 0)
+			return
+		}
+		if err := database.ImportRedirects(redirects); err != nil {
+			var conflicts *db.SlugConflictsError
+			if errors.As(err, &conflicts) {
+				writeImportConflicts(w, conflicts.Slugs)
+				return
+			}
+			writeManagementError(w, http.StatusInternalServerError, "internal server error")
+			return
+		}
+		writeImportResult(w, len(redirects), len(redirects))
+	})
+}
+
+func parseDryRun(r *http.Request) (bool, error) {
+	values, present := r.URL.Query()["dry_run"]
+	if !present {
+		return false, nil
+	}
+	if len(values) != 1 {
+		return false, errors.New("dry_run must have one value")
+	}
+	switch values[0] {
+	case "true":
+		return true, nil
+	case "false":
+		return false, nil
+	default:
+		return false, errors.New("invalid dry_run value")
+	}
+}
+
+func writeImportConflicts(w http.ResponseWriter, conflicts []string) {
+	writeManagementJSON(w, http.StatusConflict, struct {
+		Error     string   `json:"error"`
+		Conflicts []string `json:"conflicts"`
+	}{Error: "slug conflicts", Conflicts: conflicts})
+}
+
+func writeImportResult(w http.ResponseWriter, total, imported int) {
+	writeManagementJSON(w, http.StatusOK, struct {
+		Total    int `json:"total"`
+		Imported int `json:"imported"`
+	}{Total: total, Imported: imported})
 }
 
 func writeRedirectResult(w http.ResponseWriter, redirect db.Redirect, err error, successStatus int) {

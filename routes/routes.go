@@ -17,6 +17,8 @@ func newRouter(database *db.DbWrapper, managementToken string, generateSlug hand
 	router.HandleFunc("/.well-known/readyz", handlers.ReadinessHandler(database))
 	router.HandleFunc("/api/", http.NotFound)
 	if managementToken != "" {
+		router.Handle("/api/v1/exports", handlers.BearerAuth(managementToken, handlers.ManagementExportHandler(database)))
+		router.Handle("/api/v1/imports", handlers.BearerAuth(managementToken, handlers.ManagementImportHandler(database)))
 		router.Handle("/api/v1/redirects", handlers.BearerAuth(managementToken, handlers.ManagementCollectionHandler(database, generateSlug)))
 		router.Handle("/api/v1/redirects/{slug}", handlers.BearerAuth(managementToken, handlers.ManagementItemHandler(database)))
 		router.Handle("/api/v1/redirects/{slug}/disable", handlers.BearerAuth(managementToken, handlers.ManagementDisableHandler(database)))

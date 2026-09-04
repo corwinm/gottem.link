@@ -4,6 +4,8 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"sort"
+	"strings"
 
 	"github.com/mattn/go-sqlite3"
 )
@@ -20,6 +22,20 @@ type Redirect struct {
 	CreatedAt  string  `json:"created_at"`
 	UpdatedAt  string  `json:"updated_at"`
 	DisabledAt *string `json:"disabled_at"`
+}
+
+type ImportRedirect struct {
+	Slug     string
+	URL      string
+	Disabled bool
+}
+
+type SlugConflictsError struct {
+	Slugs []string
+}
+
+func (err *SlugConflictsError) Error() string {
+	return "slug conflicts: " + strings.Join(err.Slugs, ", ")
 }
 
 const redirectColumns = "id, slug, url, created_at, updated_at, disabled_at"
@@ -59,6 +75,61 @@ func (db *DbWrapper) ListRedirects() ([]Redirect, error) {
 		return nil, fmt.Errorf("list redirects: %w", err)
 	}
 	return redirects, nil
+}
+
+func (db *DbWrapper) ImportRedirects(redirects []ImportRedirect) error {
+	tx, err := db.db.Begin()
+	if err != nil {
+		return fmt.Errorf("begin redirect import: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	conflicts := make([]string, 0)
+	for _, redirect := range redirects {
+		var exists bool
+		if err := tx.QueryRow("SELECT EXISTS (SELECT 1 FROM redirects WHERE slug = ?)", redirect.Slug).Scan(&exists); err != nil {
+			return fmt.Errorf("check redirect import conflicts: %w", err)
+		}
+		if exists {
+			conflicts = append(conflicts, sqliteNOCASEName(redirect.Slug))
+		}
+	}
+	if len(conflicts) > 0 {
+		sort.Strings(conflicts)
+		return &SlugConflictsError{Slugs: conflicts}
+	}
+
+	for _, redirect := range redirects {
+		_, err := tx.Exec(`
+			INSERT INTO redirects (slug, url, disabled_at)
+			VALUES (?, ?, CASE WHEN ? THEN CURRENT_TIMESTAMP ELSE NULL END)
+		`, redirect.Slug, redirect.URL, redirect.Disabled)
+		if isUniqueConstraint(err) {
+			return &SlugConflictsError{Slugs: []string{sqliteNOCASEName(redirect.Slug)}}
+		}
+		if err != nil {
+			return fmt.Errorf("import redirect: %w", err)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit redirect import: %w", err)
+	}
+	return nil
+}
+
+func (db *DbWrapper) RedirectImportConflicts(redirects []ImportRedirect) ([]string, error) {
+	conflicts := make([]string, 0)
+	for _, redirect := range redirects {
+		var exists bool
+		if err := db.QueryRow("SELECT EXISTS (SELECT 1 FROM redirects WHERE slug = ?)", redirect.Slug).Scan(&exists); err != nil {
+			return nil, fmt.Errorf("check redirect import conflicts: %w", err)
+		}
+		if exists {
+			conflicts = append(conflicts, sqliteNOCASEName(redirect.Slug))
+		}
+	}
+	sort.Strings(conflicts)
+	return conflicts, nil
 }
 
 func (db *DbWrapper) GetRedirect(slug string) (Redirect, error) {
@@ -155,4 +226,14 @@ func scanRedirect(scanner redirectScanner) (Redirect, error) {
 func isUniqueConstraint(err error) bool {
 	var sqliteErr sqlite3.Error
 	return errors.As(err, &sqliteErr) && sqliteErr.ExtendedCode == sqlite3.ErrConstraintUnique
+}
+
+func sqliteNOCASEName(value string) string {
+	folded := []byte(value)
+	for index, character := range folded {
+		if character >= 'A' && character <= 'Z' {
+			folded[index] = character + ('a' - 'A')
+		}
+	}
+	return string(folded)
 }

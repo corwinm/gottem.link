@@ -19,10 +19,12 @@ Set `GOTTEM_MANAGEMENT_TOKEN` to enable the API. Every management request requir
 
 - `POST /api/v1/redirects` with `{"slug":"name","url":"https://example.com"}` creates a redirect.
 - `GET /api/v1/redirects` lists redirects, including disabled entries.
+- `GET /api/v1/exports` returns the compact versioned portable export.
 - `GET /api/v1/redirects/{slug}` inspects one redirect.
 - `PUT /api/v1/redirects/{slug}` with `{"url":"https://example.com/new"}` replaces its destination.
 - `POST /api/v1/redirects/{slug}/disable` disables public resolution.
 - `DELETE /api/v1/redirects/{slug}` permanently removes it.
+- `POST /api/v1/imports?dry_run=true` validates a versioned portable export without writing; omit the query to import it atomically.
 
 Destinations must use `http` or `https` and be no more than 2048 bytes. URLs with credentials, invalid or empty hosts, or unsafe characters are rejected. Custom slugs are canonicalized to lowercase and must contain 1–64 ASCII letters or digits, with only single internal hyphens; `api` and the `.well-known` namespace are reserved. Omitting `slug` or setting it to `null` generates a seven-character slug, while an explicitly empty slug is invalid.
 
@@ -35,6 +37,26 @@ Responses are JSON except successful deletion, which returns 204. Validation fai
 Schema version 1 introduced case-insensitively unique, non-null slugs; non-null destinations; and creation/update timestamps. Version 2 adds the nullable disable timestamp used by management operations. Migration from the legacy version-0 table is transactional, preserves IDs and destinations, and fails without changing the original database when legacy rows violate the new constraints. Versions newer than the binary supports are rejected.
 
 Before merging a schema change, export and validate a production backup, run `make container-test`, and confirm that live machine/volume regions still match `primary_region`. After deployment, verify schema version, row count, readiness, and known redirects.
+
+## Portable export and import
+
+`gottem export` writes a versioned logical backup that can rebuild redirect behavior without database access:
+
+```json
+{"version":1,"redirects":[{"slug":"name","url":"https://example.com","disabled":false}]}
+```
+
+The format intentionally excludes database IDs and timestamps. Treat exports as sensitive because they contain private destination URLs, and store them encrypted outside the repository.
+
+Validate the entire file and report slug conflicts without writing before applying an import:
+
+```sh
+gottem export > redirects-v1.json
+gottem import redirects-v1.json
+gottem import --apply redirects-v1.json
+```
+
+Use `-` instead of a filename to read from standard input. Import is transactional and rejects unsupported versions, unknown or duplicate JSON fields, missing required fields, empty slugs or destinations, duplicate slugs under SQLite's ASCII-only `NOCASE` rules, and existing slug conflicts. As a restore format, it otherwise preserves valid UTF-8 legacy slug and destination values exactly, along with whether each redirect is active or disabled. Export fails explicitly rather than corrupting a legacy row that contains invalid UTF-8.
 
 ## Deploy and rollback
 
@@ -67,5 +89,7 @@ Fly takes daily volume snapshots and currently retains them for five days. Befor
 ## Restore
 
 Run `make backup-test` to exercise backup validation and restoration against a disposable SQLite database.
+
+The management CLI integration test separately exports active and disabled redirects from one disposable service, dry-runs and applies them to another, and verifies equivalent redirect behavior.
 
 A production restore replaces the live database and requires explicit approval. Validate the backup first, upload it to the current primary, run `litefs import -name gottem.db PATH`, then verify `/.well-known/readyz` and known redirects. Never copy a database directly into `/litefs` or `/var/lib/litefs`.

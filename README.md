@@ -38,9 +38,11 @@ gottem get SLUG
 gottem update SLUG URL
 gottem disable SLUG
 gottem delete [--force] SLUG
+gottem export
+gottem import [--apply] FILE
 ```
 
-Pass `--json` before the command for machine-readable output. Delete prompts for confirmation unless `--force` is supplied.
+Pass `--json` before CRUD commands for machine-readable output. Export writes the versioned portable JSON format; import accepts that format from a file or from standard input with `-`, dry-runs by default, and writes only with `--apply`. Delete prompts for confirmation unless `--force` is supplied.
 
 ## Checks
 
