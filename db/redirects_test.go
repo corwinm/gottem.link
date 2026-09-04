@@ -126,6 +126,35 @@ func TestImportRedirectsAtomicallyPreservesDisabledState(t *testing.T) {
 	}
 }
 
+func TestImportRedirectsRollsBackOnMidImportFailure(t *testing.T) {
+	database, err := db.GetDB(filepath.Join(t.TempDir(), "gottem.db"))
+	if err != nil {
+		t.Fatalf("initialize database: %v", err)
+	}
+	t.Cleanup(database.Close)
+	if _, err := database.Exec(`
+		CREATE TRIGGER reject_second_import
+		BEFORE INSERT ON redirects
+		WHEN NEW.slug = 'second'
+		BEGIN
+			SELECT RAISE(ABORT, 'forced import failure');
+		END
+	`); err != nil {
+		t.Fatalf("create failure trigger: %v", err)
+	}
+
+	err = database.ImportRedirects([]db.ImportRedirect{
+		{Slug: "first", URL: "https://example.com/first"},
+		{Slug: "second", URL: "https://example.com/second"},
+	})
+	if err == nil {
+		t.Fatal("import succeeded")
+	}
+	if _, err := database.GetRedirect("first"); !errors.Is(err, db.ErrRedirectNotFound) {
+		t.Fatalf("first redirect survived rollback: %v", err)
+	}
+}
+
 func TestImportRedirectsReportsSortedConflictsWithoutWrites(t *testing.T) {
 	database, err := db.GetDB(filepath.Join(t.TempDir(), "gottem.db"))
 	if err != nil {

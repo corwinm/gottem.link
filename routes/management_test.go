@@ -108,13 +108,22 @@ func TestManagementAPIRequiresAuthentication(t *testing.T) {
 	t.Cleanup(database.Close)
 	router := routes.NewRouter(database, testManagementToken)
 
-	for name, token := range map[string]string{"missing": "", "wrong": "wrong-token"} {
-		t.Run(name, func(t *testing.T) {
-			response := managementRequest(t, router, http.MethodGet, "/api/v1/redirects", "", token)
-			if response.Code != http.StatusUnauthorized {
-				t.Fatalf("status = %d, want 401", response.Code)
-			}
-		})
+	for _, path := range []string{"/api/v1/redirects", "/api/v1/imports"} {
+		for name, token := range map[string]string{"missing": "", "wrong": "wrong-token"} {
+			t.Run(path+" "+name, func(t *testing.T) {
+				response := managementRequest(t, router, http.MethodPost, path, `{}`, token)
+				if response.Code != http.StatusUnauthorized {
+					t.Fatalf("status = %d, want 401", response.Code)
+				}
+			})
+		}
+	}
+
+	for _, path := range []string{"/api/v1/redirects", "/api/v1/imports"} {
+		response := managementRequest(t, routes.NewRouter(database, ""), http.MethodPost, path, `{}`, "anything")
+		if response.Code != http.StatusNotFound {
+			t.Fatalf("%s status = %d, want 404", path, response.Code)
+		}
 	}
 }
 

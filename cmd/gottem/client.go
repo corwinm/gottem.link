@@ -27,8 +27,9 @@ type redirect struct {
 }
 
 type apiError struct {
-	Error string `json:"error"`
-	Field string `json:"field"`
+	Error     string   `json:"error"`
+	Field     string   `json:"field"`
+	Conflicts []string `json:"conflicts"`
 }
 
 type importResult struct {
@@ -156,6 +157,9 @@ func responseError(response *http.Response, body []byte, token string) error {
 	}
 	var payload apiError
 	if json.Unmarshal(body, &payload) == nil && payload.Error != "" {
+		if len(payload.Conflicts) > 0 {
+			return fmt.Errorf("request failed: %s: %s: %s", status, payload.Error, strings.Join(payload.Conflicts, ", "))
+		}
 		if payload.Field != "" {
 			return fmt.Errorf("request failed: %s: %s (field: %s)", status, payload.Error, payload.Field)
 		}

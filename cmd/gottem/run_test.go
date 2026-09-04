@@ -169,6 +169,22 @@ func TestImportDefaultsToDryRunAndApplyMustBeExplicit(t *testing.T) {
 	}
 }
 
+func TestImportReportsAllSlugConflicts(t *testing.T) {
+	payload := `{"version":1,"redirects":[{"slug":"alpha","url":"https://example.com/a","disabled":false},{"slug":"zeta","url":"https://example.com/z","disabled":false}]}`
+	path := filepath.Join(t.TempDir(), "export.json")
+	if err := os.WriteFile(path, []byte(payload), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	client := clientFor(func(request *http.Request) (*http.Response, error) {
+		return jsonResponse(http.StatusConflict, `{"error":"slug conflicts","conflicts":["alpha","zeta"]}`), nil
+	})
+
+	code, stdout, stderr := runCLI(t, []string{"--base-url", "http://example.test", "import", path}, client, nil)
+	if code != 1 || stdout != "" || !strings.Contains(stderr, "alpha") || !strings.Contains(stderr, "zeta") {
+		t.Fatalf("code/stdout/stderr = %d/%q/%q", code, stdout, stderr)
+	}
+}
+
 func TestImportReadsStdinAndJSONOutputIsUnchanged(t *testing.T) {
 	payload := `{"version":1,"redirects":[]}`
 	client := clientFor(func(request *http.Request) (*http.Response, error) {

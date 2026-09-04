@@ -220,7 +220,7 @@ Keep it short and update it as commands become real:
 
 **Done when:** a link can be created, verified, changed, disabled, and removed without direct database access.
 
-#### 1.4 Import, export, and backup — Next
+#### 1.4 Import, export, and backup — In progress
 
 - Export redirects in a documented JSON or CSV format.
 - Import with dry-run validation and conflict reporting.
@@ -279,7 +279,7 @@ Avoid accounts, teams, billing, distributed caches, event pipelines, or multi-re
 8. **Complete:** Add inspect, update, disable, and delete endpoints.
 9. **Complete:** Add strict URL and slug validation plus generated slugs.
 10. **Complete:** Add the JSON-capable management CLI.
-11. **Add dry-run import/export and restore verification.**
+11. **In progress:** Add dry-run import/export and restore verification.
 12. **Add a minimal private admin UI.**
 
 The first three issues may be grouped into one recovery PR only if the tests remain focused and the diff stays small. Later issues should generally be separate PRs.
