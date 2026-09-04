@@ -56,7 +56,7 @@ gottem import redirects-v1.json
 gottem import --apply redirects-v1.json
 ```
 
-Use `-` instead of a filename to read from standard input. Import is transactional, rejects unsupported versions, unknown fields, empty slugs or destinations, duplicate slugs under SQLite's ASCII-only `NOCASE` rules, and existing slug conflicts. As a restore format, it otherwise preserves legacy slug and destination values byte-for-byte, along with whether each redirect is active or disabled.
+Use `-` instead of a filename to read from standard input. Import is transactional and rejects unsupported versions, unknown or duplicate JSON fields, missing required fields, empty slugs or destinations, duplicate slugs under SQLite's ASCII-only `NOCASE` rules, and existing slug conflicts. As a restore format, it otherwise preserves valid UTF-8 legacy slug and destination values exactly, along with whether each redirect is active or disabled. Export fails explicitly rather than corrupting a legacy row that contains invalid UTF-8.
 
 ## Deploy and rollback
 

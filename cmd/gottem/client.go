@@ -63,9 +63,15 @@ func (client managementClient) list(ctx context.Context) ([]redirect, error) {
 }
 
 func (client managementClient) export(ctx context.Context) (backup.Envelope, error) {
-	var result backup.Envelope
-	err := client.requestJSON(ctx, http.MethodGet, exportURL(client.baseURL), nil, http.StatusOK, &result)
-	return result, err
+	var raw json.RawMessage
+	if err := client.requestJSON(ctx, http.MethodGet, exportURL(client.baseURL), nil, http.StatusOK, &raw); err != nil {
+		return backup.Envelope{}, err
+	}
+	result, err := backup.Decode(bytes.NewReader(raw))
+	if err != nil {
+		return backup.Envelope{}, errors.New("server returned invalid export")
+	}
+	return result, nil
 }
 
 func (client managementClient) get(ctx context.Context, slug string) (redirect, error) {

@@ -208,6 +208,26 @@ func TestPortableExportEndpoint(t *testing.T) {
 	}
 }
 
+func TestPortableExportRejectsLegacyInvalidUTF8(t *testing.T) {
+	database, err := db.GetDB(filepath.Join(t.TempDir(), "gottem.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(database.Close)
+	invalidURL := string([]byte{'/', 0xff})
+	if _, err := database.Exec(`INSERT INTO redirects (slug, url) VALUES (?, ?)`, "legacy", invalidURL); err != nil {
+		t.Fatal(err)
+	}
+
+	response := managementRequest(t, routes.NewRouter(database, testManagementToken), http.MethodGet, "/api/v1/exports", "", testManagementToken)
+	if response.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("status/body = %d/%q, want 422", response.Code, response.Body.String())
+	}
+	if strings.Contains(response.Body.String(), "�") {
+		t.Fatalf("response silently replaced invalid UTF-8: %q", response.Body.String())
+	}
+}
+
 func TestBulkImportDryRunAndApply(t *testing.T) {
 	database, err := db.GetDB(filepath.Join(t.TempDir(), "gottem.db"))
 	if err != nil {

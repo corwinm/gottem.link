@@ -64,6 +64,9 @@ func Decode(reader io.Reader) (Envelope, error) {
 	if len(data) > MaxBytes {
 		return Envelope{}, ErrTooLarge
 	}
+	if err := rejectDuplicateObjectFields(data); err != nil {
+		return Envelope{}, errors.New("invalid import JSON")
+	}
 
 	var wire wireEnvelope
 	decoder := json.NewDecoder(bytes.NewReader(data))
@@ -95,6 +98,55 @@ func Decode(reader io.Reader) (Envelope, error) {
 		return Envelope{}, err
 	}
 	return envelope, nil
+}
+
+func rejectDuplicateObjectFields(data []byte) error {
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	var walk func() error
+	walk = func() error {
+		token, err := decoder.Token()
+		if err != nil {
+			return err
+		}
+		delimiter, ok := token.(json.Delim)
+		if !ok {
+			return nil
+		}
+		switch delimiter {
+		case '{':
+			seen := make(map[string]struct{})
+			for decoder.More() {
+				keyToken, err := decoder.Token()
+				if err != nil {
+					return err
+				}
+				key, ok := keyToken.(string)
+				if !ok {
+					return errors.New("object key is not a string")
+				}
+				if _, exists := seen[key]; exists {
+					return errors.New("duplicate object field")
+				}
+				seen[key] = struct{}{}
+				if err := walk(); err != nil {
+					return err
+				}
+			}
+			_, err = decoder.Token()
+			return err
+		case '[':
+			for decoder.More() {
+				if err := walk(); err != nil {
+					return err
+				}
+			}
+			_, err = decoder.Token()
+			return err
+		default:
+			return errors.New("unexpected JSON delimiter")
+		}
+	}
+	return walk()
 }
 
 func validate(envelope *Envelope) error {

@@ -136,6 +136,27 @@ func TestExportEmitsStableVersionOneEnvelope(t *testing.T) {
 	assertRequest(t, got, http.MethodGet, "/api/v1/exports", "", false)
 }
 
+func TestExportRejectsInvalidSuccessPayloads(t *testing.T) {
+	tests := map[string]string{
+		"missing fields":       `{}`,
+		"missing disabled":     `{"version":1,"redirects":[{"slug":"one","url":"https://example.com"}]}`,
+		"unknown field":        `{"version":1,"redirects":[],"extra":true}`,
+		"unsupported version":  `{"version":2,"redirects":[]}`,
+		"duplicate object key": `{"version":1,"redirects":[],"redirects":[]}`,
+	}
+	for name, response := range tests {
+		t.Run(name, func(t *testing.T) {
+			client := clientFor(func(request *http.Request) (*http.Response, error) {
+				return jsonResponse(http.StatusOK, response), nil
+			})
+			code, stdout, stderr := runCLI(t, []string{"--base-url", "http://example.test", "export"}, client, nil)
+			if code != 1 || stdout != "" || !strings.Contains(stderr, "invalid export") {
+				t.Fatalf("code/stdout/stderr = %d/%q/%q", code, stdout, stderr)
+			}
+		})
+	}
+}
+
 func TestImportDefaultsToDryRunAndApplyMustBeExplicit(t *testing.T) {
 	payload := `{"version":1,"redirects":[{"slug":"Known","url":"https://example.com","disabled":false}]}`
 	path := filepath.Join(t.TempDir(), "export.json")

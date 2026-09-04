@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"unicode/utf8"
 
 	"corwinm/gottem.link/backup"
 	"corwinm/gottem.link/db"
@@ -169,6 +170,10 @@ func ManagementExportHandler(database *db.DbWrapper) http.Handler {
 		}
 		redirects := make([]backup.Redirect, len(values))
 		for index, value := range values {
+			if !utf8.ValidString(value.Slug) || !utf8.ValidString(value.URL) {
+				writeManagementError(w, http.StatusUnprocessableEntity, "export contains invalid UTF-8")
+				return
+			}
 			redirects[index] = backup.Redirect{Slug: value.Slug, URL: value.URL, Disabled: value.DisabledAt != nil}
 		}
 		payload, err := json.Marshal(backup.Envelope{Version: backup.Version, Redirects: redirects})
