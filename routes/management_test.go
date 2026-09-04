@@ -242,6 +242,33 @@ func TestBulkImportDryRunAndApply(t *testing.T) {
 	}
 }
 
+func TestBulkImportRejectsAmbiguousDryRunValuesWithoutWrites(t *testing.T) {
+	payload := `{"version":1,"redirects":[{"slug":"active","url":"https://example.com/a","disabled":false}]}`
+	paths := []string{
+		"/api/v1/imports?dry_run=tru",
+		"/api/v1/imports?dry_run=True",
+		"/api/v1/imports?dry_run=true&dry_run=false",
+	}
+	for _, path := range paths {
+		t.Run(path, func(t *testing.T) {
+			database, err := db.GetDB(filepath.Join(t.TempDir(), "gottem.db"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(database.Close)
+
+			response := managementRequest(t, routes.NewRouter(database, testManagementToken), http.MethodPost, path, payload, testManagementToken)
+			if response.Code != http.StatusBadRequest {
+				t.Fatalf("status/body = %d/%s", response.Code, response.Body.String())
+			}
+			listed, err := database.ListRedirects()
+			if err != nil || len(listed) != 0 {
+				t.Fatalf("redirects after rejection = %#v, %v", listed, err)
+			}
+		})
+	}
+}
+
 func TestBulkImportReportsAllSortedConflictsWithoutWrites(t *testing.T) {
 	database, err := db.GetDB(filepath.Join(t.TempDir(), "gottem.db"))
 	if err != nil {

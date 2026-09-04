@@ -27,6 +27,17 @@ type Redirect struct {
 	Disabled bool   `json:"disabled"`
 }
 
+type wireEnvelope struct {
+	Version   int             `json:"version"`
+	Redirects *[]wireRedirect `json:"redirects"`
+}
+
+type wireRedirect struct {
+	Slug     string `json:"slug"`
+	URL      string `json:"url"`
+	Disabled *bool  `json:"disabled"`
+}
+
 type Issue struct {
 	Index   int    `json:"index"`
 	Field   string `json:"field"`
@@ -54,17 +65,31 @@ func Decode(reader io.Reader) (Envelope, error) {
 		return Envelope{}, ErrTooLarge
 	}
 
-	var envelope Envelope
+	var wire wireEnvelope
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&envelope); err != nil {
+	if err := decoder.Decode(&wire); err != nil {
 		return Envelope{}, errors.New("invalid import JSON")
 	}
 	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
 		return Envelope{}, errors.New("import must contain exactly one JSON value")
 	}
-	if envelope.Version != Version {
-		return Envelope{}, fmt.Errorf("unsupported import version %d", envelope.Version)
+	if wire.Version != Version {
+		return Envelope{}, fmt.Errorf("unsupported import version %d", wire.Version)
+	}
+	if wire.Redirects == nil {
+		return Envelope{}, errors.New("invalid import JSON")
+	}
+	envelope := Envelope{Version: wire.Version, Redirects: make([]Redirect, len(*wire.Redirects))}
+	for index, redirect := range *wire.Redirects {
+		if redirect.Disabled == nil {
+			return Envelope{}, errors.New("invalid import JSON")
+		}
+		envelope.Redirects[index] = Redirect{
+			Slug:     redirect.Slug,
+			URL:      redirect.URL,
+			Disabled: *redirect.Disabled,
+		}
 	}
 	if err := validate(&envelope); err != nil {
 		return Envelope{}, err

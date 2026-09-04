@@ -193,6 +193,11 @@ func ManagementImportHandler(database *db.DbWrapper) http.Handler {
 			writeManagementError(w, http.StatusMethodNotAllowed, "method not allowed")
 			return
 		}
+		dryRun, err := parseDryRun(r)
+		if err != nil {
+			writeManagementError(w, http.StatusBadRequest, "invalid dry_run value")
+			return
+		}
 		envelope, err := backup.Decode(r.Body)
 		if err != nil {
 			var validationErr *backup.ValidationError
@@ -211,7 +216,7 @@ func ManagementImportHandler(database *db.DbWrapper) http.Handler {
 		for index, redirect := range envelope.Redirects {
 			redirects[index] = db.ImportRedirect{Slug: redirect.Slug, URL: redirect.URL, Disabled: redirect.Disabled}
 		}
-		if r.URL.Query().Get("dry_run") == "true" {
+		if dryRun {
 			conflicts, err := database.RedirectImportConflicts(redirects)
 			if err != nil {
 				writeManagementError(w, http.StatusInternalServerError, "internal server error")
@@ -235,6 +240,24 @@ func ManagementImportHandler(database *db.DbWrapper) http.Handler {
 		}
 		writeImportResult(w, len(redirects), len(redirects))
 	})
+}
+
+func parseDryRun(r *http.Request) (bool, error) {
+	values, present := r.URL.Query()["dry_run"]
+	if !present {
+		return false, nil
+	}
+	if len(values) != 1 {
+		return false, errors.New("dry_run must have one value")
+	}
+	switch values[0] {
+	case "true":
+		return true, nil
+	case "false":
+		return false, nil
+	default:
+		return false, errors.New("invalid dry_run value")
+	}
 }
 
 func writeImportConflicts(w http.ResponseWriter, conflicts []string) {

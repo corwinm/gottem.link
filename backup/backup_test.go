@@ -24,6 +24,9 @@ func TestDecodeRejectsNonCanonicalJSON(t *testing.T) {
 	tests := map[string]string{
 		"unknown envelope field": `{"version":1,"redirects":[],"extra":true}`,
 		"unknown redirect field": `{"version":1,"redirects":[{"slug":"one","url":"https://example.com","disabled":false,"extra":true}]}`,
+		"missing redirects":      `{"version":1}`,
+		"null redirects":         `{"version":1,"redirects":null}`,
+		"missing disabled":       `{"version":1,"redirects":[{"slug":"one","url":"https://example.com"}]}`,
 		"trailing JSON":          `{"version":1,"redirects":[]} {}`,
 		"unsupported version":    `{"version":2,"redirects":[]}`,
 	}
