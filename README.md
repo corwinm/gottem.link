@@ -18,7 +18,28 @@ The local server listens on `:8080` and stores data in `./gottem.db`. Override e
 go run . -addr :3000 -dsn /path/to/gottem.db
 ```
 
-Set `GOTTEM_MANAGEMENT_TOKEN` to enable the private JSON management API. `GOTTEM_BACKUP_TOKEN` may separately grant read-only access to the export endpoint; it cannot access redirect management or imports. Without either token, `/api/` returns 404. Creating a redirect accepts an optional `slug`; omitted or `null` slugs are generated automatically, while custom slugs are validated and stored in lowercase.
+Set `GOTTEM_MANAGEMENT_TOKEN` to enable the private JSON management API. `GOTTEM_BACKUP_TOKEN` may separately grant read-only access to the export endpoint; it cannot access redirect management, imports, or browser sessions. Without either token, `/api/` returns 404. Creating a redirect accepts an optional `slug`; omitted or `null` slugs are generated automatically, while custom slugs are validated and stored in lowercase.
+
+### Admin web UI
+
+The optional dependency-free admin console is served at `/admin`. It uses the existing JSON management API and includes create, search, copy, edit, disable/enable, and confirmed delete flows. Configure it with the management token plus two additional values:
+
+```sh
+export GOTTEM_MANAGEMENT_TOKEN='...'
+export GOTTEM_SESSION_SECRET='at-least-32-random-bytes-kept-secret'
+export GOTTEM_ADMIN_ORIGIN='https://gottem.link'
+go run . -addr :8080 -dsn ./gottem.db
+```
+
+`GOTTEM_ADMIN_ORIGIN` is the exact browser origin, with no trailing slash or explicit default port (`:443` for HTTPS or `:80` for HTTP). HTTPS is required outside local development. For local HTTP testing only, loopback origins such as `http://127.0.0.1:8080` and `http://localhost:8080` are accepted:
+
+```sh
+export GOTTEM_ADMIN_ORIGIN='http://127.0.0.1:8080'
+```
+
+Login verifies `GOTTEM_MANAGEMENT_TOKEN` once and stores a signed 8-hour `HttpOnly`, `SameSite=Strict` cookie—not the token. Cookies are `Secure` on HTTPS; local loopback HTTP is the only exception. Session signatures are bound to the current management-token fingerprint, so rotating that token invalidates existing sessions. Cookie-authenticated writes and login/logout require an exact `Origin` match. Existing bearer-authenticated API and CLI requests remain compatible and do not require an `Origin` header. The UI and session routes remain unavailable unless the complete configuration is valid.
+
+The frontend is embedded HTML, CSS, and vanilla JavaScript with no runtime CDN or Node dependency. HTMX remains a possible future enhancement only if real interaction needs justify it.
 
 ## Management CLI
 

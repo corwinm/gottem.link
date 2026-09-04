@@ -186,6 +186,8 @@ func TestValidateSlugRejectsReservedSlugs(t *testing.T) {
 	tests := []string{
 		"api",
 		"API",
+		"admin",
+		"ADMIN",
 		".well-known",
 		".well-known/healthz",
 		".WELL-KNOWN-anything",

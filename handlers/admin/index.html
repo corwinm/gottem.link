@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>gottem.link admin</title>
+  <link rel="stylesheet" href="/admin/assets/admin.css">
+  <script src="/admin/assets/admin.js" defer></script>
+</head>
+<body>
+  <main class="shell">
+    <header class="topbar">
+      <a class="brand" href="/admin" aria-label="gottem.link admin home">gottem.link</a>
+      <button id="logout" class="button quiet" type="button" hidden>Log out</button>
+    </header>
+
+    <div id="notice" class="notice" role="status" aria-live="polite"></div>
+
+    <section id="login-view" class="auth-panel" aria-labelledby="login-heading">
+      <p class="eyebrow">Private console</p>
+      <h1 id="login-heading">Manage redirects</h1>
+      <p class="muted">Use the management token once to start a short-lived browser session.</p>
+      <form id="login-form">
+        <label for="token">Management token</label>
+        <input id="token" name="token" type="password" autocomplete="current-password" required>
+        <button class="button primary" type="submit">Sign in</button>
+      </form>
+    </section>
+
+    <section id="admin-view" hidden aria-labelledby="links-heading">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">Redirects</p>
+          <h1 id="links-heading">Links</h1>
+        </div>
+      </div>
+
+      <form id="create-form" class="create-panel">
+        <div class="field destination-field">
+          <label for="destination">Destination URL</label>
+          <input id="destination" name="url" type="url" inputmode="url" placeholder="https://example.com/page" required>
+        </div>
+        <div class="field slug-field">
+          <label for="slug">Custom slug <span class="muted">optional</span></label>
+          <input id="slug" name="slug" type="text" autocapitalize="none" autocomplete="off" placeholder="generated">
+        </div>
+        <button class="button primary create-button" type="submit">Create link</button>
+      </form>
+
+      <div class="toolbar">
+        <label class="search-label" for="search">Search links</label>
+        <input id="search" type="search" placeholder="Search slug or destination" autocomplete="off">
+      </div>
+
+      <p id="loading-state" class="state">Loading links…</p>
+      <p id="empty-state" class="state" hidden>No links yet. Create the first one above.</p>
+      <p id="filter-empty-state" class="state" hidden>No links match this search.</p>
+      <ul id="redirect-list" class="redirect-list" aria-label="Redirects"></ul>
+    </section>
+  </main>
+
+  <template id="redirect-template">
+    <li class="redirect-card">
+      <div class="redirect-main">
+        <div class="slug-line">
+          <a class="short-link" target="_blank" rel="noopener"></a>
+          <span class="status"></span>
+        </div>
+        <p class="destination"></p>
+      </div>
+      <div class="actions" aria-label="Link actions">
+        <button class="button quiet copy" type="button">Copy</button>
+        <button class="button quiet edit" type="button">Edit</button>
+        <button class="button quiet toggle" type="button"></button>
+        <button class="button danger delete" type="button">Delete</button>
+      </div>
+    </li>
+  </template>
+
+  <dialog id="delete-dialog" aria-labelledby="delete-title">
+    <form method="dialog">
+      <h2 id="delete-title">Delete link?</h2>
+      <p id="delete-message"></p>
+      <div class="dialog-actions">
+        <button class="button quiet" value="cancel">Cancel</button>
+        <button id="confirm-delete" class="button danger" value="confirm">Delete permanently</button>
+      </div>
+    </form>
+  </dialog>
+</body>
+</html>

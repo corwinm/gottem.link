@@ -37,7 +37,11 @@ func main() {
 	defer database.Close()
 
 	server := &http.Server{
-		Handler:           routes.NewRouterWithBackupToken(database, config.managementToken, config.backupToken),
+		Handler: routes.NewRouterWithAdmin(database, config.managementToken, config.backupToken, routes.AdminConfig{
+			Origin:        config.adminOrigin,
+			SessionSecret: config.sessionSecret,
+			SecureCookies: config.secureCookies,
+		}),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       10 * time.Second,
 		WriteTimeout:      30 * time.Second,

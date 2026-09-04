@@ -20,6 +20,7 @@ func BearerAuthAny(tokens []string, next http.Handler) http.Handler {
 	}
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "no-store")
 		scheme, supplied, ok := strings.Cut(r.Header.Get("Authorization"), " ")
 		actual := sha256.Sum256([]byte(supplied))
 		authorized := 0
