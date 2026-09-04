@@ -31,7 +31,7 @@ func TestManagementAPILifecycle(t *testing.T) {
 	}
 	var created db.Redirect
 	decodeJSON(t, createdResponse, &created)
-	if created.Slug != "Known" || created.URL != "https://example.com/one" {
+	if created.Slug != "known" || created.URL != "https://example.com/one" {
 		t.Fatalf("created redirect = %#v", created)
 	}
 
