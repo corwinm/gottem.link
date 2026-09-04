@@ -141,7 +141,7 @@ func writeCreate(writer io.Writer, command command, value redirect) error {
 	if command.json {
 		return writeJSON(writer, value)
 	}
-	_, err := fmt.Fprintf(writer, "Created %s/%s -> %s\n", command.baseURL.String(), value.Slug, value.URL)
+	_, err := fmt.Fprintf(writer, "Created %s/%s -> %s\n", sanitize(command.baseURL.String()), sanitize(value.Slug), sanitize(value.URL))
 	return err
 }
 
@@ -158,7 +158,7 @@ func writeList(writer io.Writer, jsonOutput bool, values []redirect) error {
 		return err
 	}
 	for _, value := range values {
-		if _, err := fmt.Fprintf(table, "%s\t%s\t%s\n", value.Slug, redirectStatus(value), value.URL); err != nil {
+		if _, err := fmt.Fprintf(table, "%s	%s	%s\n", sanitize(value.Slug), redirectStatus(value), sanitize(value.URL)); err != nil {
 			return err
 		}
 	}
@@ -169,11 +169,11 @@ func writeGet(writer io.Writer, jsonOutput bool, value redirect) error {
 	if jsonOutput {
 		return writeJSON(writer, value)
 	}
-	if _, err := fmt.Fprintf(writer, "Slug: %s\nURL: %s\nStatus: %s\nCreated: %s\nUpdated: %s\n", value.Slug, value.URL, redirectStatus(value), value.CreatedAt, value.UpdatedAt); err != nil {
+	if _, err := fmt.Fprintf(writer, "Slug: %s\nURL: %s\nStatus: %s\nCreated: %s\nUpdated: %s\n", sanitize(value.Slug), sanitize(value.URL), redirectStatus(value), sanitize(value.CreatedAt), sanitize(value.UpdatedAt)); err != nil {
 		return err
 	}
 	if value.DisabledAt != nil {
-		_, err := fmt.Fprintf(writer, "Disabled: %s\n", *value.DisabledAt)
+		_, err := fmt.Fprintf(writer, "Disabled: %s\n", sanitize(*value.DisabledAt))
 		return err
 	}
 	return nil
@@ -183,7 +183,7 @@ func writeUpdate(writer io.Writer, jsonOutput bool, value redirect) error {
 	if jsonOutput {
 		return writeJSON(writer, value)
 	}
-	_, err := fmt.Fprintf(writer, "Updated %s -> %s\n", value.Slug, value.URL)
+	_, err := fmt.Fprintf(writer, "Updated %s -> %s\n", sanitize(value.Slug), sanitize(value.URL))
 	return err
 }
 
@@ -191,7 +191,7 @@ func writeDisable(writer io.Writer, jsonOutput bool, value redirect) error {
 	if jsonOutput {
 		return writeJSON(writer, value)
 	}
-	_, err := fmt.Fprintf(writer, "Disabled %s\n", value.Slug)
+	_, err := fmt.Fprintf(writer, "Disabled %s\n", sanitize(value.Slug))
 	return err
 }
 
@@ -202,7 +202,7 @@ func writeDelete(writer io.Writer, jsonOutput bool, slug string) error {
 			Slug    string `json:"slug"`
 		}{Deleted: true, Slug: slug})
 	}
-	_, err := fmt.Fprintf(writer, "Deleted %s\n", slug)
+	_, err := fmt.Fprintf(writer, "Deleted %s\n", sanitize(slug))
 	return err
 }
 

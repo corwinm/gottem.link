@@ -12,6 +12,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode"
 )
 
 const testToken = "sentinel-management-token"
@@ -494,6 +495,75 @@ func TestCommandsRejectUnexpectedSuccessStatuses(t *testing.T) {
 				t.Fatalf("code/stdout/stderr = %d/%q/%q", code, stdout, stderr)
 			}
 		})
+	}
+}
+
+func TestHumanReadableOutputSanitizesFields(t *testing.T) {
+	malicious := "value\tline\r\n\x1b[31m"
+	disabledAt := malicious
+	value := redirect{
+		Slug:       malicious,
+		URL:        malicious,
+		CreatedAt:  malicious,
+		UpdatedAt:  malicious,
+		DisabledAt: &disabledAt,
+	}
+	base, err := url.Parse("https://example.test")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	tests := []struct {
+		name  string
+		lines int
+		write func(io.Writer) error
+	}{
+		{name: "create", lines: 1, write: func(writer io.Writer) error {
+			return writeCreate(writer, command{baseURL: base}, value)
+		}},
+		{name: "list", lines: 2, write: func(writer io.Writer) error {
+			return writeList(writer, false, []redirect{value})
+		}},
+		{name: "get", lines: 6, write: func(writer io.Writer) error {
+			return writeGet(writer, false, value)
+		}},
+		{name: "update", lines: 1, write: func(writer io.Writer) error {
+			return writeUpdate(writer, false, value)
+		}},
+		{name: "disable", lines: 1, write: func(writer io.Writer) error {
+			return writeDisable(writer, false, value)
+		}},
+		{name: "delete", lines: 1, write: func(writer io.Writer) error {
+			return writeDelete(writer, false, malicious)
+		}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			var output bytes.Buffer
+			if err := test.write(&output); err != nil {
+				t.Fatal(err)
+			}
+			if strings.Count(output.String(), "\n") != test.lines {
+				t.Fatalf("output contains injected line breaks: %q", output.String())
+			}
+			for _, character := range output.String() {
+				if unicode.IsControl(character) && character != '\n' {
+					t.Fatalf("output contains control character %U: %q", character, output.String())
+				}
+			}
+		})
+	}
+
+	var jsonOutput bytes.Buffer
+	if err := writeGet(&jsonOutput, true, value); err != nil {
+		t.Fatal(err)
+	}
+	var decoded redirect
+	if err := json.Unmarshal(jsonOutput.Bytes(), &decoded); err != nil {
+		t.Fatal(err)
+	}
+	if decoded.Slug != malicious || decoded.URL != malicious || decoded.CreatedAt != malicious || decoded.UpdatedAt != malicious || decoded.DisabledAt == nil || *decoded.DisabledAt != malicious {
+		t.Fatalf("JSON output was sanitized: %#v", decoded)
 	}
 }
 
