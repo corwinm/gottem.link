@@ -127,7 +127,7 @@ func isDottedNumeric(hostname string) bool {
 
 func containsUnsafeCharacter(value string) bool {
 	for _, character := range value {
-		if unicode.IsControl(character) || unicode.In(character, unicode.Cf, unicode.Zl, unicode.Zp) {
+		if unicode.IsControl(character) || unicode.IsSpace(character) || unicode.In(character, unicode.Cf) {
 			return true
 		}
 	}

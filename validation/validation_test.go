@@ -18,6 +18,7 @@ func TestValidateDestinationAcceptsAbsoluteHTTPURLsWithoutChangingThem(t *testin
 		"https://127.0.0.1:65535/resource",
 		"https://[2001:db8::1]/resource",
 		"https://example.com/%E2%80%8B",
+		"https://example.com/a%20b?query=a%20b#fragment%20value",
 		maxLengthURL,
 	}
 
@@ -29,6 +30,30 @@ func TestValidateDestinationAcceptsAbsoluteHTTPURLsWithoutChangingThem(t *testin
 			}
 			if got != input {
 				t.Fatalf("ValidateDestination(%q) = %q, want original input", input, got)
+			}
+		})
+	}
+}
+
+func TestValidateDestinationRejectsUnescapedWhitespace(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+	}{
+		{name: "ASCII space in path", input: "https://example.com/a b"},
+		{name: "ASCII space in query", input: "https://example.com/?query=a b"},
+		{name: "ASCII space in fragment", input: "https://example.com/#a b"},
+		{name: "Unicode no-break space", input: "https://example.com/a\u00a0b"},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got, err := validation.ValidateDestination(test.input)
+			if !errors.Is(err, validation.ErrInvalidDestination) {
+				t.Fatalf("ValidateDestination(%q) error = %v, want ErrInvalidDestination", test.input, err)
+			}
+			if got != "" {
+				t.Fatalf("ValidateDestination(%q) = %q, want empty result", test.input, got)
 			}
 		})
 	}
