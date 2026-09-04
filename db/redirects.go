@@ -180,6 +180,23 @@ func (db *DbWrapper) DisableRedirect(slug string) (Redirect, error) {
 	return redirect, nil
 }
 
+func (db *DbWrapper) EnableRedirect(slug string) (Redirect, error) {
+	redirect, err := scanRedirect(db.QueryRow(`
+		UPDATE redirects
+		SET disabled_at = NULL, updated_at = CURRENT_TIMESTAMP
+		WHERE slug = ?
+		RETURNING `+redirectColumns,
+		slug,
+	))
+	if errors.Is(err, sql.ErrNoRows) {
+		return Redirect{}, ErrRedirectNotFound
+	}
+	if err != nil {
+		return Redirect{}, fmt.Errorf("enable redirect: %w", err)
+	}
+	return redirect, nil
+}
+
 func (db *DbWrapper) InsertRedirect(slug, url string) error {
 	_, err := db.CreateRedirect(slug, url)
 	return err

@@ -39,7 +39,7 @@ func ValidateSlug(slug string) (string, error) {
 		return "", ErrInvalidSlug
 	}
 	canonical := strings.ToLower(slug)
-	if canonical == "api" || strings.HasPrefix(canonical, ".well-known") {
+	if canonical == "api" || canonical == "admin" || strings.HasPrefix(canonical, ".well-known") {
 		return "", ErrReservedSlug
 	}
 

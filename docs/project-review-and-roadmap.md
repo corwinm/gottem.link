@@ -220,7 +220,7 @@ Keep it short and update it as commands become real:
 
 **Done when:** a link can be created, verified, changed, disabled, and removed without direct database access.
 
-#### 1.4 Import, export, and backup — In progress
+#### 1.4 Import, export, and backup — Complete
 
 - Export redirects in a documented JSON or CSV format.
 - Import with dry-run validation and conflict reporting.
@@ -230,13 +230,17 @@ Keep it short and update it as commands become real:
 
 ### Milestone 2 — Daily usability
 
-#### 2.1 Minimal admin web UI
+#### 2.1 Minimal admin web UI — Complete
 
 - Add a private, mobile-friendly page for creating and managing links.
 - Include copy-to-clipboard, search, status, and clear conflict/error messages.
 - Build on the management API rather than adding a second business-logic path.
+- Keep the initial frontend dependency-free: embed HTML, CSS, and vanilla JavaScript in the Go binary. HTMX is a possible later enhancement if observed interaction patterns justify it, not a planned dependency or rewrite.
+- Authenticate browsers with a short-lived signed `Secure`, `HttpOnly`, `SameSite=Strict` cookie while preserving bearer-token authentication for the CLI and automation.
 
 **Done when:** routine link management works comfortably from phone and desktop with keyboard-accessible controls.
+
+**Delivered:** the embedded dependency-free console uses short-lived signed browser sessions, exact-origin protection for cookie-authenticated writes, and the existing JSON API. Bearer authentication remains available for the CLI, automation, and backup export; HTMX remains future-only.
 
 #### 2.2 Link lifecycle controls
 
@@ -279,7 +283,7 @@ Avoid accounts, teams, billing, distributed caches, event pipelines, or multi-re
 8. **Complete:** Add inspect, update, disable, and delete endpoints.
 9. **Complete:** Add strict URL and slug validation plus generated slugs.
 10. **Complete:** Add the JSON-capable management CLI.
-11. **In progress:** Add dry-run import/export and restore verification.
-12. **Add a minimal private admin UI.**
+11. **Complete:** Add dry-run import/export and restore verification.
+12. **Complete:** Add a minimal private admin UI.
 
 The first three issues may be grouped into one recovery PR only if the tests remain focused and the diff stays small. Later issues should generally be separate PRs.

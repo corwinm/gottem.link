@@ -156,6 +156,18 @@ func ManagementDisableHandler(database *db.DbWrapper) http.Handler {
 	})
 }
 
+func ManagementEnableHandler(database *db.DbWrapper) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			w.Header().Set("Allow", "POST")
+			writeManagementError(w, http.StatusMethodNotAllowed, "method not allowed")
+			return
+		}
+		redirect, err := database.EnableRedirect(r.PathValue("slug"))
+		writeRedirectResult(w, redirect, err, http.StatusOK)
+	})
+}
+
 func ManagementExportHandler(database *db.DbWrapper) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {

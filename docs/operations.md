@@ -15,7 +15,7 @@ The multi-segment namespace keeps these operational routes from shadowing existi
 
 ## Management API
 
-Set `GOTTEM_MANAGEMENT_TOKEN` to enable redirect management and imports; those requests require its bearer credential. `GET /api/v1/exports` accepts either that credential or the distinct read-only `GOTTEM_BACKUP_TOKEN`. Public redirects remain unauthenticated. Tokens are read from the environment, compared in constant time, and never included in responses or logs. If neither token is configured, `/api/` returns 404; with only a backup token, other API routes remain unavailable.
+Set `GOTTEM_MANAGEMENT_TOKEN` to enable redirect management and imports; those requests accept its bearer credential. When the admin UI is fully configured as described in the README, redirect management and imports also accept its signed browser session cookie, with exact-origin enforcement on unsafe methods. `GET /api/v1/exports` remains bearer-only and accepts either the management credential or the distinct read-only `GOTTEM_BACKUP_TOKEN`. Public redirects remain unauthenticated. Tokens are read from the environment, compared in constant time, and never included in responses or logs. If neither token is configured, `/api/` returns 404; with only a backup token, other API routes remain unavailable.
 
 - `POST /api/v1/redirects` with `{"slug":"name","url":"https://example.com"}` creates a redirect.
 - `GET /api/v1/redirects` lists redirects, including disabled entries.
@@ -23,10 +23,11 @@ Set `GOTTEM_MANAGEMENT_TOKEN` to enable redirect management and imports; those r
 - `GET /api/v1/redirects/{slug}` inspects one redirect.
 - `PUT /api/v1/redirects/{slug}` with `{"url":"https://example.com/new"}` replaces its destination.
 - `POST /api/v1/redirects/{slug}/disable` disables public resolution.
+- `POST /api/v1/redirects/{slug}/enable` restores public resolution.
 - `DELETE /api/v1/redirects/{slug}` permanently removes it.
 - `POST /api/v1/imports?dry_run=true` validates a versioned portable export without writing; omit the query to import it atomically.
 
-Destinations must use `http` or `https` and be no more than 2048 bytes. URLs with credentials, invalid or empty hosts, or unsafe characters are rejected. Custom slugs are canonicalized to lowercase and must contain 1–64 ASCII letters or digits, with only single internal hyphens; `api` and the `.well-known` namespace are reserved. Omitting `slug` or setting it to `null` generates a seven-character slug, while an explicitly empty slug is invalid.
+Destinations must use `http` or `https` and be no more than 2048 bytes. URLs with credentials, invalid or empty hosts, or unsafe characters are rejected. Custom slugs are canonicalized to lowercase and must contain 1–64 ASCII letters or digits, with only single internal hyphens; `api`, `admin`, and the `.well-known` namespace are reserved. Omitting `slug` or setting it to `null` generates a seven-character slug, while an explicitly empty slug is invalid.
 
 Responses are JSON except successful deletion, which returns 204. Validation failures return 400 JSON with a field-specific `field` value; slug conflicts return 409; missing redirects return 404. Keep the production token only in Fly secrets and a secure local credential store.
 
