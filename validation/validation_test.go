@@ -14,7 +14,10 @@ func TestValidateDestinationAcceptsAbsoluteHTTPURLsWithoutChangingThem(t *testin
 		"http://example.com",
 		"https://example.com/path?query=value#fragment",
 		"https://Example.COM:8443/a%2Fb?x=One#Top",
+		"http://127.0.0.1:1",
+		"https://127.0.0.1:65535/resource",
 		"https://[2001:db8::1]/resource",
+		"https://example.com/%E2%80%8B",
 		maxLengthURL,
 	}
 
@@ -49,6 +52,23 @@ func TestValidateDestinationRejectsInvalidURLs(t *testing.T) {
 		{name: "nul control", input: "https://example.com/a\x00b"},
 		{name: "delete control", input: "https://example.com/a\x7fb"},
 		{name: "unicode control", input: "https://example.com/a\u0085b"},
+		{name: "malformed UTF-8", input: "https://example.com/a\xffb"},
+		{name: "unicode format character", input: "https://example.com/a\u200bb"},
+		{name: "unicode line separator", input: "https://example.com/a\u2028b"},
+		{name: "unicode paragraph separator", input: "https://example.com/a\u2029b"},
+		{name: "empty port", input: "https://example.com:/path"},
+		{name: "zero port", input: "https://example.com:0/path"},
+		{name: "port above range", input: "https://example.com:65536/path"},
+		{name: "large port above range", input: "https://example.com:99999/path"},
+		{name: "hyphen host", input: "https://-/path"},
+		{name: "leading host label hyphen", input: "https://-example.com/path"},
+		{name: "trailing host label hyphen", input: "https://example-.com/path"},
+		{name: "empty host label", input: "https://example..com/path"},
+		{name: "trailing empty host label", input: "https://example.com./path"},
+		{name: "oversized host label", input: "https://" + strings.Repeat("a", 64) + ".com/path"},
+		{name: "invalid dotted numeric address", input: "https://127.0.0.999/path"},
+		{name: "non-ASCII hostname", input: "https://café.example/path"},
+		{name: "invisible hostname character", input: "https://exam\u200bple.com/path"},
 		{name: "oversized", input: "https://example.com/" + strings.Repeat("a", 2048)},
 	}
 
@@ -122,6 +142,18 @@ func TestValidateSlugRejectsInvalidSyntax(t *testing.T) {
 				t.Fatalf("ValidateSlug(%q) = %q, want empty result", test.input, got)
 			}
 		})
+	}
+}
+
+func TestValidateSlugChecksLengthBeforeReservedNamespace(t *testing.T) {
+	input := ".well-known" + strings.Repeat("a", 64)
+
+	got, err := validation.ValidateSlug(input)
+	if !errors.Is(err, validation.ErrInvalidSlug) {
+		t.Fatalf("ValidateSlug(%q) error = %v, want ErrInvalidSlug", input, err)
+	}
+	if got != "" {
+		t.Fatalf("ValidateSlug(%q) = %q, want empty result", input, got)
 	}
 }
 

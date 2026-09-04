@@ -2,9 +2,12 @@ package validation
 
 import (
 	"errors"
+	"net"
 	"net/url"
+	"strconv"
 	"strings"
 	"unicode"
+	"unicode/utf8"
 )
 
 const (
@@ -19,12 +22,12 @@ var (
 )
 
 func ValidateDestination(destination string) (string, error) {
-	if destination == "" || len(destination) > maxDestinationBytes || containsControlCharacter(destination) {
+	if destination == "" || len(destination) > maxDestinationBytes || !utf8.ValidString(destination) || containsUnsafeCharacter(destination) {
 		return "", ErrInvalidDestination
 	}
 
 	parsed, err := url.Parse(destination)
-	if err != nil || (!strings.EqualFold(parsed.Scheme, "http") && !strings.EqualFold(parsed.Scheme, "https")) || parsed.Hostname() == "" || parsed.User != nil {
+	if err != nil || (!strings.EqualFold(parsed.Scheme, "http") && !strings.EqualFold(parsed.Scheme, "https")) || parsed.User != nil || !validAuthority(parsed) {
 		return "", ErrInvalidDestination
 	}
 
@@ -32,12 +35,12 @@ func ValidateDestination(destination string) (string, error) {
 }
 
 func ValidateSlug(slug string) (string, error) {
+	if len(slug) == 0 || len(slug) > maxSlugLength {
+		return "", ErrInvalidSlug
+	}
 	canonical := strings.ToLower(slug)
 	if canonical == "api" || strings.HasPrefix(canonical, ".well-known") {
 		return "", ErrReservedSlug
-	}
-	if len(slug) == 0 || len(slug) > maxSlugLength {
-		return "", ErrInvalidSlug
 	}
 
 	result := make([]byte, len(slug))
@@ -58,9 +61,73 @@ func ValidateSlug(slug string) (string, error) {
 	return string(result), nil
 }
 
-func containsControlCharacter(value string) bool {
+func validAuthority(parsed *url.URL) bool {
+	hostname := parsed.Hostname()
+	if hostname == "" || !validHostname(hostname) {
+		return false
+	}
+
+	port, explicit := explicitPort(parsed.Host)
+	if !explicit {
+		return true
+	}
+	portNumber, err := strconv.Atoi(port)
+	return err == nil && portNumber >= 1 && portNumber <= 65535
+}
+
+func explicitPort(host string) (string, bool) {
+	if strings.HasPrefix(host, "[") {
+		closingBracket := strings.LastIndexByte(host, ']')
+		if closingBracket < 0 || closingBracket == len(host)-1 {
+			return "", false
+		}
+		return host[closingBracket+2:], true
+	}
+
+	colon := strings.LastIndexByte(host, ':')
+	if colon < 0 {
+		return "", false
+	}
+	return host[colon+1:], true
+}
+
+func validHostname(hostname string) bool {
+	if net.ParseIP(hostname) != nil {
+		return true
+	}
+	if len(hostname) > 253 || isDottedNumeric(hostname) {
+		return false
+	}
+
+	for _, label := range strings.Split(hostname, ".") {
+		if len(label) == 0 || len(label) > 63 || label[0] == '-' || label[len(label)-1] == '-' {
+			return false
+		}
+		for i := range len(label) {
+			character := label[i]
+			if (character < 'a' || character > 'z') && (character < 'A' || character > 'Z') && (character < '0' || character > '9') && character != '-' {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+func isDottedNumeric(hostname string) bool {
+	if !strings.Contains(hostname, ".") {
+		return false
+	}
+	for i := range len(hostname) {
+		if hostname[i] != '.' && (hostname[i] < '0' || hostname[i] > '9') {
+			return false
+		}
+	}
+	return true
+}
+
+func containsUnsafeCharacter(value string) bool {
 	for _, character := range value {
-		if unicode.IsControl(character) {
+		if unicode.IsControl(character) || unicode.In(character, unicode.Cf, unicode.Zl, unicode.Zp) {
 			return true
 		}
 	}
