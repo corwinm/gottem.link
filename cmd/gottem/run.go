@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 )
 
@@ -152,6 +153,11 @@ func parseBaseURL(raw string) (*url.URL, error) {
 	}
 	if parsed.Host == "" || parsed.Opaque != "" || parsed.User != nil || parsed.RawQuery != "" || parsed.ForceQuery || parsed.Fragment != "" {
 		return nil, errors.New("must be an origin without userinfo, query, or fragment")
+	}
+	if port := parsed.Port(); port != "" {
+		if _, err := strconv.ParseUint(port, 10, 16); err != nil {
+			return nil, errors.New("port must be between 0 and 65535")
+		}
 	}
 	if escaped := parsed.EscapedPath(); escaped != "" && escaped != "/" {
 		return nil, errors.New("path must be empty or /")

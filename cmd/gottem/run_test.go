@@ -353,6 +353,19 @@ func TestAPIErrorIncludesDecodedField(t *testing.T) {
 	}
 }
 
+func TestOutOfRangeBaseURLPortFailsBeforeRequest(t *testing.T) {
+	requests := 0
+	client := clientFor(func(request *http.Request) (*http.Response, error) {
+		requests++
+		return jsonResponse(http.StatusOK, "[]"), nil
+	})
+
+	code, stdout, stderr := runCLI(t, []string{"--base-url", "http://example.com:99999", "list"}, client, nil)
+	if code != 2 || stdout != "" || requests != 0 || !strings.Contains(stderr, "invalid base URL") {
+		t.Fatalf("code/stdout/stderr/requests = %d/%q/%q/%d", code, stdout, stderr, requests)
+	}
+}
+
 func TestUsageErrors(t *testing.T) {
 	tests := []struct {
 		name string
