@@ -11,6 +11,8 @@ import (
 	"net/url"
 	"strings"
 	"unicode"
+
+	"corwinm/gottem.link/backup"
 )
 
 const maxResponseBodyBytes = 1 << 20
@@ -27,6 +29,11 @@ type redirect struct {
 type apiError struct {
 	Error string `json:"error"`
 	Field string `json:"field"`
+}
+
+type importResult struct {
+	Total    int `json:"total"`
+	Imported int `json:"imported"`
 }
 
 type managementClient struct {
@@ -76,6 +83,12 @@ func (client managementClient) disable(ctx context.Context, slug string) (redire
 
 func (client managementClient) delete(ctx context.Context, slug string) error {
 	return client.requestJSON(ctx, http.MethodDelete, redirectURL(client.baseURL, slug), nil, http.StatusNoContent, nil)
+}
+
+func (client managementClient) importRedirects(ctx context.Context, envelope backup.Envelope, dryRun bool) (importResult, error) {
+	var result importResult
+	err := client.requestJSON(ctx, http.MethodPost, importURL(client.baseURL, dryRun), envelope, http.StatusOK, &result)
+	return result, err
 }
 
 func (client managementClient) requestJSON(ctx context.Context, method string, target *url.URL, payload any, expectedStatus int, result any) error {
@@ -188,4 +201,13 @@ func disableURL(base *url.URL, slug string) *url.URL {
 	result.Path += "/disable"
 	result.RawPath += "/disable"
 	return result
+}
+
+func importURL(base *url.URL, dryRun bool) *url.URL {
+	result := *base
+	result.Path = "/api/v1/imports"
+	if dryRun {
+		result.RawQuery = "dry_run=true"
+	}
+	return &result
 }

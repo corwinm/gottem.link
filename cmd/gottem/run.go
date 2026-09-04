@@ -17,6 +17,8 @@ type command struct {
 	slugSet     bool
 	destination string
 	force       bool
+	apply       bool
+	file        string
 	json        bool
 	baseURL     *url.URL
 }
@@ -58,6 +60,10 @@ func parseCommand(args []string) (command, error) {
 		err = parseCreate(&result, commandArgs)
 	case "list":
 		err = requireArguments(commandArgs, 0, "list takes no arguments")
+	case "export":
+		err = requireArguments(commandArgs, 0, "export takes no arguments")
+	case "import":
+		err = parseImport(&result, commandArgs)
 	case "get", "disable":
 		if err = requireArguments(commandArgs, 1, result.name+" requires exactly one slug"); err == nil {
 			result.slug = commandArgs[0]
@@ -83,6 +89,20 @@ func parseCommand(args []string) (command, error) {
 		return result, fmt.Errorf("invalid base URL: %w", err)
 	}
 	return result, nil
+}
+
+func parseImport(result *command, args []string) error {
+	if len(args) >= 1 && args[0] == "--apply" {
+		result.apply = true
+		args = args[1:]
+	} else if len(args) >= 1 && strings.HasPrefix(args[0], "-") && args[0] != "-" {
+		return fmt.Errorf("unknown import flag %q", args[0])
+	}
+	if err := requireArguments(args, 1, "import requires exactly one FILE"); err != nil {
+		return err
+	}
+	result.file = args[0]
+	return requireNonEmpty(result.file, "FILE")
 }
 
 func parseCreate(result *command, args []string) error {

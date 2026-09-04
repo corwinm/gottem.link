@@ -11,6 +11,8 @@ import (
 	"os"
 	"strings"
 	"text/tabwriter"
+
+	"corwinm/gottem.link/backup"
 )
 
 type confirmFunc func(slug string) (bool, error)
@@ -62,6 +64,36 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer, httpClient *h
 			err = requestErr
 		} else {
 			err = writeList(stdout, command.json, values)
+		}
+	case "export":
+		values, requestErr := client.list(ctx)
+		if requestErr != nil {
+			err = requestErr
+		} else {
+			err = writeExport(stdout, values)
+		}
+	case "import":
+		var reader io.Reader = stdin
+		var file *os.File
+		if command.file != "-" {
+			file, err = os.Open(command.file)
+			if err != nil {
+				err = errors.New("open import file")
+				break
+			}
+			defer file.Close()
+			reader = file
+		}
+		envelope, decodeErr := backup.Decode(reader)
+		if decodeErr != nil {
+			err = decodeErr
+			break
+		}
+		value, requestErr := client.importRedirects(ctx, envelope, !command.apply)
+		if requestErr != nil {
+			err = requestErr
+		} else {
+			err = writeImport(stdout, command.json, command.apply, value)
 		}
 	case "get":
 		value, requestErr := client.get(ctx, command.slug)
@@ -131,6 +163,8 @@ func writeDiagnostic(writer io.Writer, err error, token string) {
 const usageText = `Usage:
   gottem [--base-url URL] [--json] create [--slug SLUG] URL
   gottem [--base-url URL] [--json] list
+  gottem [--base-url URL] [--json] export
+  gottem [--base-url URL] [--json] import [--apply] FILE
   gottem [--base-url URL] [--json] get SLUG
   gottem [--base-url URL] [--json] update SLUG URL
   gottem [--base-url URL] [--json] disable SLUG
@@ -163,6 +197,26 @@ func writeList(writer io.Writer, jsonOutput bool, values []redirect) error {
 		}
 	}
 	return table.Flush()
+}
+
+func writeExport(writer io.Writer, values []redirect) error {
+	redirects := make([]backup.Redirect, len(values))
+	for index, value := range values {
+		redirects[index] = backup.Redirect{Slug: value.Slug, URL: value.URL, Disabled: value.DisabledAt != nil}
+	}
+	return writeJSON(writer, backup.Envelope{Version: backup.Version, Redirects: redirects})
+}
+
+func writeImport(writer io.Writer, jsonOutput, apply bool, value importResult) error {
+	if jsonOutput {
+		return writeJSON(writer, value)
+	}
+	if apply {
+		_, err := fmt.Fprintf(writer, "Imported %d redirects.\n", value.Imported)
+		return err
+	}
+	_, err := fmt.Fprintf(writer, "Validated %d redirects; no changes applied.\n", value.Total)
+	return err
 }
 
 func writeGet(writer io.Writer, jsonOutput bool, value redirect) error {

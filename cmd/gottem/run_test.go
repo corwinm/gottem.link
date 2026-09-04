@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -113,6 +115,99 @@ func TestCommandHTTPMappingsAndJSON(t *testing.T) {
 				}
 			}
 			assertRequest(t, got, test.method, test.requestURI, test.body, test.body != "")
+		})
+	}
+}
+
+func TestExportEmitsStableVersionOneEnvelope(t *testing.T) {
+	var got recordedRequest
+	client := clientFor(func(request *http.Request) (*http.Response, error) {
+		got = recordRequest(t, request)
+		return jsonResponse(http.StatusOK, "["+redirectJSON("active", "https://example.com/a", false)+","+redirectJSON("off", "https://example.com/o", true)+"]"), nil
+	})
+	code, stdout, stderr := runCLI(t, []string{"--base-url", "http://example.test", "export"}, client, nil)
+	if code != 0 || stderr != "" {
+		t.Fatalf("code/stderr = %d/%q", code, stderr)
+	}
+	want := "{\"version\":1,\"redirects\":[{\"slug\":\"active\",\"url\":\"https://example.com/a\",\"disabled\":false},{\"slug\":\"off\",\"url\":\"https://example.com/o\",\"disabled\":true}]}\n"
+	if stdout != want {
+		t.Fatalf("stdout = %q, want %q", stdout, want)
+	}
+	assertRequest(t, got, http.MethodGet, "/api/v1/redirects", "", false)
+}
+
+func TestImportDefaultsToDryRunAndApplyMustBeExplicit(t *testing.T) {
+	payload := `{"version":1,"redirects":[{"slug":"Known","url":"https://example.com","disabled":false}]}`
+	path := filepath.Join(t.TempDir(), "export.json")
+	if err := os.WriteFile(path, []byte(payload), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	tests := []struct {
+		name       string
+		args       []string
+		requestURI string
+		response   string
+		wantOut    string
+	}{
+		{name: "default dry run", args: []string{"import", path}, requestURI: "/api/v1/imports?dry_run=true", response: `{"total":1,"imported":0}`, wantOut: "Validated 1 redirects; no changes applied.\n"},
+		{name: "explicit apply", args: []string{"import", "--apply", path}, requestURI: "/api/v1/imports", response: `{"total":1,"imported":1}`, wantOut: "Imported 1 redirects.\n"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			var got recordedRequest
+			client := clientFor(func(request *http.Request) (*http.Response, error) {
+				got = recordRequest(t, request)
+				return jsonResponse(http.StatusOK, test.response), nil
+			})
+			code, stdout, stderr := runCLI(t, append([]string{"--base-url", "http://example.test"}, test.args...), client, nil)
+			if code != 0 || stdout != test.wantOut || stderr != "" {
+				t.Fatalf("code/stdout/stderr = %d/%q/%q", code, stdout, stderr)
+			}
+			wantBody := `{"version":1,"redirects":[{"slug":"known","url":"https://example.com","disabled":false}]}`
+			assertRequest(t, got, http.MethodPost, test.requestURI, wantBody, true)
+		})
+	}
+}
+
+func TestImportReadsStdinAndJSONOutputIsUnchanged(t *testing.T) {
+	payload := `{"version":1,"redirects":[]}`
+	client := clientFor(func(request *http.Request) (*http.Response, error) {
+		got := recordRequest(t, request)
+		assertRequest(t, got, http.MethodPost, "/api/v1/imports?dry_run=true", payload, true)
+		return jsonResponse(http.StatusOK, `{"total":0,"imported":0}`), nil
+	})
+	t.Setenv("GOTTEM_MANAGEMENT_TOKEN", testToken)
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"--base-url", "http://example.test", "--json", "import", "-"}, strings.NewReader(payload), &stdout, &stderr, client, nil)
+	if code != 0 || stdout.String() != "{\"total\":0,\"imported\":0}\n" || stderr.Len() != 0 {
+		t.Fatalf("code/stdout/stderr = %d/%q/%q", code, stdout.String(), stderr.String())
+	}
+}
+
+func TestImportRejectsInvalidInputBeforeRequestWithoutLeakingURLs(t *testing.T) {
+	secret := "https://secret.example/private"
+	inputs := map[string]string{
+		"semantic issues": `{"version":1,"redirects":[{"slug":"bad slug","url":"` + secret + `","disabled":false},{"slug":"DUP","url":"bad","disabled":false},{"slug":"dup","url":"https://example.com","disabled":false}]}`,
+		"unknown field":   `{"version":1,"redirects":[],"extra":true}`,
+		"trailing JSON":   `{"version":1,"redirects":[]} {}`,
+		"oversized":       strings.Repeat(" ", (1<<20)+1),
+	}
+	for name, input := range inputs {
+		t.Run(name, func(t *testing.T) {
+			requests := 0
+			client := clientFor(func(request *http.Request) (*http.Response, error) {
+				requests++
+				return nil, errors.New("unexpected request")
+			})
+			t.Setenv("GOTTEM_MANAGEMENT_TOKEN", testToken)
+			var stdout, stderr bytes.Buffer
+			code := run([]string{"--base-url", "http://example.test", "import", "-"}, strings.NewReader(input), &stdout, &stderr, client, nil)
+			if code != 1 || stdout.Len() != 0 || stderr.Len() == 0 || requests != 0 {
+				t.Fatalf("code/stdout/stderr/requests = %d/%q/%q/%d", code, stdout.String(), stderr.String(), requests)
+			}
+			if strings.Contains(stderr.String(), secret) {
+				t.Fatalf("diagnostic leaked URL: %q", stderr.String())
+			}
 		})
 	}
 }
@@ -634,7 +729,7 @@ func recordRequest(t *testing.T, request *http.Request) recordedRequest {
 	}
 	return recordedRequest{
 		method:      request.Method,
-		requestURI:  request.URL.EscapedPath(),
+		requestURI:  request.URL.RequestURI(),
 		authorize:   request.Header.Get("Authorization"),
 		accept:      request.Header.Get("Accept"),
 		contentType: request.Header.Get("Content-Type"),

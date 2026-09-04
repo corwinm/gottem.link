@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"reflect"
+	"strings"
 	"testing"
 
 	"corwinm/gottem.link/db"
@@ -168,6 +170,101 @@ func TestManagementAPIErrors(t *testing.T) {
 	duplicate := managementRequest(t, router, http.MethodPost, "/api/v1/redirects", `{"slug":"known","url":"https://example.com/two"}`, testManagementToken)
 	if duplicate.Code != http.StatusConflict {
 		t.Fatalf("duplicate create status/body = %d/%s, want 409", duplicate.Code, duplicate.Body.String())
+	}
+}
+
+func TestBulkImportDryRunAndApply(t *testing.T) {
+	database, err := db.GetDB(filepath.Join(t.TempDir(), "gottem.db"))
+	if err != nil {
+		t.Fatalf("initialize database: %v", err)
+	}
+	t.Cleanup(database.Close)
+	router := routes.NewRouter(database, testManagementToken)
+	payload := `{"version":1,"redirects":[{"slug":"active","url":"https://example.com/a","disabled":false},{"slug":"disabled","url":"https://example.com/d","disabled":true}]}`
+
+	dryRun := managementRequest(t, router, http.MethodPost, "/api/v1/imports?dry_run=true", payload, testManagementToken)
+	if dryRun.Code != http.StatusOK || dryRun.Body.String() != "{\"total\":2,\"imported\":0}\n" {
+		t.Fatalf("dry-run status/body = %d/%s", dryRun.Code, dryRun.Body.String())
+	}
+	listed, err := database.ListRedirects()
+	if err != nil || len(listed) != 0 {
+		t.Fatalf("redirects after dry run = %#v, %v", listed, err)
+	}
+
+	applied := managementRequest(t, router, http.MethodPost, "/api/v1/imports", payload, testManagementToken)
+	if applied.Code != http.StatusOK || applied.Body.String() != "{\"total\":2,\"imported\":2}\n" {
+		t.Fatalf("apply status/body = %d/%s", applied.Code, applied.Body.String())
+	}
+	active := httptest.NewRecorder()
+	router.ServeHTTP(active, httptest.NewRequest(http.MethodGet, "/active", nil))
+	if active.Code != http.StatusFound || active.Header().Get("Location") != "https://example.com/a" {
+		t.Fatalf("active resolution = %d/%q", active.Code, active.Header().Get("Location"))
+	}
+	disabled := httptest.NewRecorder()
+	router.ServeHTTP(disabled, httptest.NewRequest(http.MethodGet, "/disabled", nil))
+	if disabled.Code != http.StatusNotFound {
+		t.Fatalf("disabled resolution = %d, want 404", disabled.Code)
+	}
+}
+
+func TestBulkImportReportsAllSortedConflictsWithoutWrites(t *testing.T) {
+	database, err := db.GetDB(filepath.Join(t.TempDir(), "gottem.db"))
+	if err != nil {
+		t.Fatalf("initialize database: %v", err)
+	}
+	t.Cleanup(database.Close)
+	if _, err := database.CreateRedirect("zeta", "https://example.com"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := database.CreateRedirect("alpha", "https://example.com"); err != nil {
+		t.Fatal(err)
+	}
+	payload := `{"version":1,"redirects":[{"slug":"ZETA","url":"https://example.com/z","disabled":false},{"slug":"new","url":"https://example.com/n","disabled":false},{"slug":"ALPHA","url":"https://example.com/a","disabled":false}]}`
+	response := managementRequest(t, routes.NewRouter(database, testManagementToken), http.MethodPost, "/api/v1/imports", payload, testManagementToken)
+	if response.Code != http.StatusConflict {
+		t.Fatalf("status/body = %d/%s", response.Code, response.Body.String())
+	}
+	var body struct {
+		Error     string   `json:"error"`
+		Conflicts []string `json:"conflicts"`
+	}
+	decodeJSON(t, response, &body)
+	if body.Error != "slug conflicts" || !reflect.DeepEqual(body.Conflicts, []string{"alpha", "zeta"}) {
+		t.Fatalf("conflict body = %#v", body)
+	}
+	if _, err := database.GetRedirect("new"); err == nil {
+		t.Fatal("non-conflicting redirect was written")
+	}
+}
+
+func TestBulkImportRejectsInvalidEnvelopesWithoutWrites(t *testing.T) {
+	secret := "https://secret.example/path"
+	tests := map[string]string{
+		"unknown field":       `{"version":1,"redirects":[],"extra":true}`,
+		"trailing JSON":       `{"version":1,"redirects":[]} {}`,
+		"unsupported version": `{"version":2,"redirects":[]}`,
+		"duplicate and fields": `{"version":1,"redirects":[` +
+			`{"slug":"bad slug","url":"` + secret + `","disabled":false},` +
+			`{"slug":"DUP","url":"bad","disabled":false},` +
+			`{"slug":"dup","url":"https://example.com","disabled":false}]}`,
+		"oversized": strings.Repeat(" ", (1<<20)+1),
+	}
+	for name, payload := range tests {
+		t.Run(name, func(t *testing.T) {
+			database, err := db.GetDB(filepath.Join(t.TempDir(), "gottem.db"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(database.Close)
+			response := managementRequest(t, routes.NewRouter(database, testManagementToken), http.MethodPost, "/api/v1/imports", payload, testManagementToken)
+			if response.Code != http.StatusBadRequest || strings.Contains(response.Body.String(), secret) {
+				t.Fatalf("status/body = %d/%s", response.Code, response.Body.String())
+			}
+			listed, err := database.ListRedirects()
+			if err != nil || len(listed) != 0 {
+				t.Fatalf("redirects after rejection = %#v, %v", listed, err)
+			}
+		})
 	}
 }
 
