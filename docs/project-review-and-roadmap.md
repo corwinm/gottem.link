@@ -212,7 +212,7 @@ Keep it short and update it as commands become real:
 
 **Done when:** validation and collision behavior are deterministic and covered by table-driven tests.
 
-#### 1.3 Practical management client — Next
+#### 1.3 Practical management client — Complete
 
 - Add a small CLI that uses the same management API for create/list/update/disable/delete.
 - Support machine-readable JSON output so Hermes, pi, Codex, and scripts can use it safely.
@@ -220,7 +220,7 @@ Keep it short and update it as commands become real:
 
 **Done when:** a link can be created, verified, changed, disabled, and removed without direct database access.
 
-#### 1.4 Import, export, and backup
+#### 1.4 Import, export, and backup — Next
 
 - Export redirects in a documented JSON or CSV format.
 - Import with dry-run validation and conflict reporting.
@@ -278,7 +278,7 @@ Avoid accounts, teams, billing, distributed caches, event pipelines, or multi-re
 7. **Complete:** Add token-authenticated create and list endpoints.
 8. **Complete:** Add inspect, update, disable, and delete endpoints.
 9. **Complete:** Add strict URL and slug validation plus generated slugs.
-10. **Add the JSON-capable management CLI.**
+10. **Complete:** Add the JSON-capable management CLI.
 11. **Add dry-run import/export and restore verification.**
 12. **Add a minimal private admin UI.**
 
