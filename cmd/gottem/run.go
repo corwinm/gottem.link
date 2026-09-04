@@ -151,7 +151,7 @@ func parseBaseURL(raw string) (*url.URL, error) {
 	if !strings.EqualFold(parsed.Scheme, "http") && !strings.EqualFold(parsed.Scheme, "https") {
 		return nil, errors.New("scheme must be http or https")
 	}
-	if parsed.Host == "" || parsed.Opaque != "" || parsed.User != nil || parsed.RawQuery != "" || parsed.ForceQuery || parsed.Fragment != "" {
+	if parsed.Hostname() == "" || parsed.Opaque != "" || parsed.User != nil || parsed.RawQuery != "" || parsed.ForceQuery || strings.Contains(raw, "#") {
 		return nil, errors.New("must be an origin without userinfo, query, or fragment")
 	}
 	if port := parsed.Port(); port != "" {

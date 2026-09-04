@@ -366,6 +366,23 @@ func TestOutOfRangeBaseURLPortFailsBeforeRequest(t *testing.T) {
 	}
 }
 
+func TestMalformedBaseURLOriginsFailBeforeRequest(t *testing.T) {
+	for _, raw := range []string{"https://:443", "http://127.0.0.1:1#"} {
+		t.Run(raw, func(t *testing.T) {
+			requests := 0
+			client := clientFor(func(request *http.Request) (*http.Response, error) {
+				requests++
+				return jsonResponse(http.StatusOK, "[]"), nil
+			})
+
+			code, stdout, stderr := runCLI(t, []string{"--base-url", raw, "list"}, client, nil)
+			if code != 2 || stdout != "" || requests != 0 || !strings.Contains(stderr, "invalid base URL") {
+				t.Fatalf("code/stdout/stderr/requests = %d/%q/%q/%d", code, stdout, stderr, requests)
+			}
+		})
+	}
+}
+
 func TestUsageErrors(t *testing.T) {
 	tests := []struct {
 		name string
