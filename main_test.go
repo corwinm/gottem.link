@@ -10,6 +10,7 @@ import (
 
 func TestParseConfigUsesNamedFlags(t *testing.T) {
 	t.Setenv("GOTTEM_MANAGEMENT_TOKEN", "test-management-token")
+	t.Setenv("GOTTEM_BACKUP_TOKEN", "test-backup-token")
 	config, err := parseConfig([]string{"-addr", ":9090", "-dsn", "/tmp/custom.db", "-migrate-only"})
 	if err != nil {
 		t.Fatalf("parseConfig returned an error: %v", err)
@@ -26,6 +27,17 @@ func TestParseConfigUsesNamedFlags(t *testing.T) {
 	}
 	if config.managementToken != "test-management-token" {
 		t.Errorf("managementToken was not read from GOTTEM_MANAGEMENT_TOKEN")
+	}
+	if config.backupToken != "test-backup-token" {
+		t.Errorf("backupToken was not read from GOTTEM_BACKUP_TOKEN")
+	}
+}
+
+func TestParseConfigRejectsMatchingManagementAndBackupTokens(t *testing.T) {
+	t.Setenv("GOTTEM_MANAGEMENT_TOKEN", "same-token")
+	t.Setenv("GOTTEM_BACKUP_TOKEN", "same-token")
+	if _, err := parseConfig(nil); err == nil {
+		t.Fatal("parseConfig accepted matching management and backup tokens")
 	}
 }
 

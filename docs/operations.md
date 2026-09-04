@@ -15,7 +15,7 @@ The multi-segment namespace keeps these operational routes from shadowing existi
 
 ## Management API
 
-Set `GOTTEM_MANAGEMENT_TOKEN` to enable the API. Every management request requires `Authorization: Bearer $GOTTEM_MANAGEMENT_TOKEN`; public redirects remain unauthenticated. The token is read from the environment, compared in constant time, and never included in responses or logs. If no token is configured, `/api/` returns 404.
+Set `GOTTEM_MANAGEMENT_TOKEN` to enable redirect management and imports; those requests require its bearer credential. `GET /api/v1/exports` accepts either that credential or the distinct read-only `GOTTEM_BACKUP_TOKEN`. Public redirects remain unauthenticated. Tokens are read from the environment, compared in constant time, and never included in responses or logs. If neither token is configured, `/api/` returns 404; with only a backup token, other API routes remain unavailable.
 
 - `POST /api/v1/redirects` with `{"slug":"name","url":"https://example.com"}` creates a redirect.
 - `GET /api/v1/redirects` lists redirects, including disabled entries.
@@ -57,6 +57,17 @@ gottem import --apply redirects-v1.json
 ```
 
 Use `-` instead of a filename to read from standard input. Import is transactional and rejects unsupported versions, unknown or duplicate JSON fields, missing required fields, empty slugs or destinations, duplicate slugs under SQLite's ASCII-only `NOCASE` rules, and existing slug conflicts. As a restore format, it otherwise preserves valid UTF-8 legacy slug and destination values exactly, along with whether each redirect is active or disabled. Export fails explicitly rather than corrupting a legacy row that contains invalid UTF-8.
+
+### Scheduled encrypted logical backups
+
+The `Encrypted Backup` GitHub Actions workflow is scheduled daily at 09:17 UTC and can also be started manually from `main`. Dispatches from other refs are skipped before secrets reach a job. It authenticates only to the export endpoint with the read-only `GOTTEM_BACKUP_TOKEN`, validates the response through the CLI's strict export decoder, encrypts it with `age`, removes the plaintext, and uploads the ciphertext as a GitHub artifact retained for 30 days.
+
+- `GOTTEM_BACKUP_TOKEN` is a secret in the GitHub `Backups` environment and a Fly application secret. The environment permits deployments only from `main`, so branch workflows cannot receive the token. It must be distinct from `GOTTEM_MANAGEMENT_TOKEN`; the server fails startup if they match. It does not authorize management writes or imports.
+- `GOTTEM_BACKUP_AGE_RECIPIENT` is a non-secret GitHub Actions variable containing the public `age` recipient.
+- The matching private identity stays outside GitHub Actions. Store it in a password manager or offline backup; losing it makes every artifact unrecoverable.
+- GitHub's normal workflow-failure notifications are the initial alerting path. GitHub can delay or drop scheduled runs, so an external daily freshness check must alert when no successful backup artifact has been created for 36 hours.
+- Before enabling the schedule, derive the recipient from the stored private identity with `age-keygen -y`, confirm it exactly matches `GOTTEM_BACKUP_AGE_RECIPIENT`, then complete one download/decrypt/import drill. Repeat the drill at least quarterly: import into an empty disposable service with `--apply` and verify representative active and disabled redirects. Production restore remains approval-gated.
+- Rollout order is: stage the distinct Fly and GitHub backup token plus the public recipient, deploy the backup-token endpoint, manually run the workflow from `main`, and complete the initial restore drill. A backup attempted before the endpoint deploys is expected to fail closed.
 
 ## Deploy and rollback
 

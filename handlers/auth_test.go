@@ -58,3 +58,22 @@ func TestBearerAuth(t *testing.T) {
 		})
 	}
 }
+
+func TestBearerAuthAny(t *testing.T) {
+	for name, authorization := range map[string]string{
+		"first token":  "Bearer management-token",
+		"second token": "Bearer backup-token",
+	} {
+		t.Run(name, func(t *testing.T) {
+			recorder := httptest.NewRecorder()
+			request := httptest.NewRequest(http.MethodGet, "/api/v1/exports", nil)
+			request.Header.Set("Authorization", authorization)
+			handlers.BearerAuthAny([]string{"management-token", "backup-token"}, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.WriteHeader(http.StatusNoContent)
+			})).ServeHTTP(recorder, request)
+			if recorder.Code != http.StatusNoContent {
+				t.Fatalf("status = %d, want 204", recorder.Code)
+			}
+		})
+	}
+}

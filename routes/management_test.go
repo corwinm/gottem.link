@@ -208,6 +208,34 @@ func TestPortableExportEndpoint(t *testing.T) {
 	}
 }
 
+func TestBackupTokenCanOnlyReadPortableExport(t *testing.T) {
+	database, err := db.GetDB(filepath.Join(t.TempDir(), "gottem.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(database.Close)
+	const backupToken = "test-backup-token"
+	router := routes.NewRouterWithBackupToken(database, testManagementToken, backupToken)
+
+	exported := managementRequest(t, router, http.MethodGet, "/api/v1/exports", "", backupToken)
+	if exported.Code != http.StatusOK {
+		t.Fatalf("export status/body = %d/%s", exported.Code, exported.Body.String())
+	}
+	for _, request := range []struct {
+		method string
+		path   string
+		body   string
+	}{
+		{method: http.MethodGet, path: "/api/v1/redirects"},
+		{method: http.MethodPost, path: "/api/v1/imports", body: `{"version":1,"redirects":[]}`},
+	} {
+		response := managementRequest(t, router, request.method, request.path, request.body, backupToken)
+		if response.Code != http.StatusUnauthorized {
+			t.Fatalf("%s %s status = %d, want 401", request.method, request.path, response.Code)
+		}
+	}
+}
+
 func TestPortableExportRejectsLegacyInvalidUTF8(t *testing.T) {
 	database, err := db.GetDB(filepath.Join(t.TempDir(), "gottem.db"))
 	if err != nil {
