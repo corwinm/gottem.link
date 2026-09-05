@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"corwinm/gottem.link/db"
+	"database/sql"
 	"embed"
 	"errors"
 	"net/http"
@@ -44,7 +45,15 @@ func adminPageOrLegacyRedirectHandler(database *db.DbWrapper, fallback http.Hand
 		case redirect.DisabledAt != nil:
 			http.Error(w, "Slug not found", http.StatusNotFound)
 		default:
-			http.Redirect(w, r, redirect.URL, http.StatusFound)
+			destination, err := database.QuerySlug("admin")
+			switch {
+			case errors.Is(err, sql.ErrNoRows):
+				http.Error(w, "Slug not found", http.StatusNotFound)
+			case err != nil:
+				http.Error(w, "Internal server error", http.StatusInternalServerError)
+			default:
+				http.Redirect(w, r, destination, http.StatusFound)
+			}
 		}
 	})
 }

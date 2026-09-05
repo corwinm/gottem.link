@@ -141,7 +141,7 @@ func TestExportRejectsInvalidSuccessPayloads(t *testing.T) {
 		"missing fields":       `{}`,
 		"missing disabled":     `{"version":1,"redirects":[{"slug":"one","url":"https://example.com"}]}`,
 		"unknown field":        `{"version":1,"redirects":[],"extra":true}`,
-		"unsupported version":  `{"version":2,"redirects":[]}`,
+		"unsupported version":  `{"version":3,"redirects":[]}`,
 		"duplicate object key": `{"version":1,"redirects":[],"redirects":[]}`,
 	}
 	for name, response := range tests {
@@ -289,6 +289,7 @@ func TestHumanOutput(t *testing.T) {
 	}{
 		{name: "get active", args: []string{"get", "active"}, response: redirectJSON("active", "https://example.com/a", false), want: []string{"Slug: active", "URL: https://example.com/a", "Status: active", "Created: 2026-09-01T10:00:00Z", "Updated: 2026-09-02T11:00:00Z"}},
 		{name: "get disabled", args: []string{"get", "off"}, response: redirectJSON("off", "https://example.com/o", true), want: []string{"Slug: off", "Status: disabled", "Disabled: " + disabled}},
+		{name: "get expired", args: []string{"get", "old"}, response: expiredRedirectJSON("old", "https://example.com/o"), want: []string{"Slug: old", "Status: expired", "Expires: 2000-01-01T00:00:00Z", "Destination updated: 2026-09-02T11:00:00Z"}},
 		{name: "list active and disabled", args: []string{"list"}, response: "[" + redirectJSON("active", "https://example.com/a", false) + "," + redirectJSON("off", "https://example.com/o", true) + "]", want: []string{"SLUG", "STATUS", "DESTINATION", "active", "active", "https://example.com/a", "off", "disabled", "https://example.com/o"}},
 		{name: "empty list", args: []string{"list"}, response: "[]", want: []string{"No redirects."}},
 	}
@@ -524,6 +525,7 @@ func TestUsageErrors(t *testing.T) {
 		{name: "unknown command", args: []string{"wat"}},
 		{name: "missing create URL", args: []string{"create"}},
 		{name: "empty create slug", args: []string{"create", "--slug", "", "https://example.com"}},
+		{name: "empty create expiration", args: []string{"create", "--expires-at", "", "https://example.com"}},
 		{name: "extra create arg", args: []string{"create", "https://example.com", "extra"}},
 		{name: "misplaced global flag", args: []string{"list", "--json"}},
 		{name: "unknown global flag", args: []string{"--wat", "list"}},
@@ -793,7 +795,11 @@ func redirectJSON(slug, destination string, disabled bool) string {
 	}
 	slugJSON, _ := json.Marshal(slug)
 	urlJSON, _ := json.Marshal(destination)
-	return fmt.Sprintf(`{"id":1,"slug":%s,"url":%s,"created_at":"2026-09-01T10:00:00Z","updated_at":"2026-09-02T11:00:00Z","disabled_at":%s}`, slugJSON, urlJSON, disabledJSON)
+	return fmt.Sprintf(`{"id":1,"slug":%s,"url":%s,"created_at":"2026-09-01T10:00:00Z","updated_at":"2026-09-02T11:00:00Z","disabled_at":%s,"expires_at":null,"destination_updated_at":"2026-09-02T11:00:00Z"}`, slugJSON, urlJSON, disabledJSON)
+}
+
+func expiredRedirectJSON(slug, destination string) string {
+	return strings.Replace(redirectJSON(slug, destination, false), `"expires_at":null`, `"expires_at":"2000-01-01T00:00:00Z"`, 1)
 }
 
 func TestParseBaseURLRejectsEncodedPath(t *testing.T) {

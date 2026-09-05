@@ -36,7 +36,7 @@ status=$(curl --silent --output /dev/null --write-out '%{http_code}' \
 	--max-time 2 "http://$address/.well-known/readyz")
 test "$status" = "200"
 
-test "$(docker exec "$container" sqlite3 -readonly /litefs/gottem.db "PRAGMA user_version;")" = "2"
+test "$(docker exec "$container" sqlite3 -readonly /litefs/gottem.db "PRAGMA user_version;")" = "3"
 
 unauthorized=$(curl --silent --output /dev/null --write-out '%{http_code}' \
 	--max-time 2 "http://$address/api/v1/redirects")

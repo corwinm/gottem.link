@@ -16,6 +16,34 @@ import (
 	"corwinm/gottem.link/routes"
 )
 
+func TestManagementCLIExpirationLifecycleAgainstRealRouter(t *testing.T) {
+	database, err := db.GetDB(filepath.Join(t.TempDir(), "gottem.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(database.Close)
+	server := httptest.NewServer(routes.NewRouter(database, testToken))
+	t.Cleanup(server.Close)
+	baseArgs := []string{"--base-url", server.URL, "--json"}
+
+	code, created, stderr := runCLI(t, append(baseArgs, "create", "--slug", "timed", "--expires-at", "2999-01-01T00:00:00Z", "https://example.com"), server.Client(), nil)
+	if code != 0 || stderr != "" || !strings.Contains(created, `"expires_at":"2999-01-01T00:00:00Z"`) {
+		t.Fatalf("create code/stdout/stderr = %d/%q/%q", code, created, stderr)
+	}
+	code, expired, stderr := runCLI(t, append(baseArgs, "expire", "timed", "2000-01-01T00:00:00Z"), server.Client(), nil)
+	if code != 0 || stderr != "" || !strings.Contains(expired, `"expires_at":"2000-01-01T00:00:00Z"`) {
+		t.Fatalf("expire code/stdout/stderr = %d/%q/%q", code, expired, stderr)
+	}
+	code, cleared, stderr := runCLI(t, append(baseArgs, "unexpire", "timed"), server.Client(), nil)
+	if code != 0 || stderr != "" || !strings.Contains(cleared, `"expires_at":null`) {
+		t.Fatalf("unexpire code/stdout/stderr = %d/%q/%q", code, cleared, stderr)
+	}
+	code, inspected, stderr := runCLI(t, append(baseArgs, "get", "timed"), server.Client(), nil)
+	if code != 0 || stderr != "" || !strings.Contains(inspected, `"destination_updated_at":`) || !strings.Contains(inspected, `"expires_at":null`) {
+		t.Fatalf("get code/stdout/stderr = %d/%q/%q", code, inspected, stderr)
+	}
+}
+
 func TestExportImportLifecycleBetweenRealDatabases(t *testing.T) {
 	sourceDB, err := db.GetDB(filepath.Join(t.TempDir(), "source.db"))
 	if err != nil {

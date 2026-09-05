@@ -7,11 +7,13 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"time"
 )
 
 const (
-	Version  = 1
-	MaxBytes = 1 << 20
+	LegacyVersion = 1
+	Version       = 2
+	MaxBytes      = 1 << 20
 )
 
 var ErrTooLarge = errors.New("import exceeds 1 MiB")
@@ -22,20 +24,59 @@ type Envelope struct {
 }
 
 type Redirect struct {
-	Slug     string `json:"slug"`
-	URL      string `json:"url"`
-	Disabled bool   `json:"disabled"`
+	Slug                 string  `json:"slug"`
+	URL                  string  `json:"url"`
+	Disabled             bool    `json:"disabled"`
+	ExpiresAt            *string `json:"expires_at"`
+	DestinationUpdatedAt string  `json:"destination_updated_at"`
 }
 
-type wireEnvelope struct {
-	Version   int             `json:"version"`
-	Redirects *[]wireRedirect `json:"redirects"`
+func (envelope Envelope) MarshalJSON() ([]byte, error) {
+	if envelope.Version == LegacyVersion {
+		type legacyRedirect struct {
+			Slug     string `json:"slug"`
+			URL      string `json:"url"`
+			Disabled bool   `json:"disabled"`
+		}
+		redirects := make([]legacyRedirect, len(envelope.Redirects))
+		for index, redirect := range envelope.Redirects {
+			redirects[index] = legacyRedirect{Slug: redirect.Slug, URL: redirect.URL, Disabled: redirect.Disabled}
+		}
+		return json.Marshal(struct {
+			Version   int              `json:"version"`
+			Redirects []legacyRedirect `json:"redirects"`
+		}{Version: envelope.Version, Redirects: redirects})
+	}
+	type versionTwoEnvelope Envelope
+	return json.Marshal(versionTwoEnvelope(envelope))
 }
 
-type wireRedirect struct {
+type versionEnvelope struct {
+	Version int `json:"version"`
+}
+
+type wireEnvelopeV1 struct {
+	Version   int               `json:"version"`
+	Redirects *[]wireRedirectV1 `json:"redirects"`
+}
+
+type wireRedirectV1 struct {
 	Slug     string `json:"slug"`
 	URL      string `json:"url"`
 	Disabled *bool  `json:"disabled"`
+}
+
+type wireEnvelopeV2 struct {
+	Version   int               `json:"version"`
+	Redirects *[]wireRedirectV2 `json:"redirects"`
+}
+
+type wireRedirectV2 struct {
+	Slug                 string          `json:"slug"`
+	URL                  string          `json:"url"`
+	Disabled             *bool           `json:"disabled"`
+	ExpiresAt            json.RawMessage `json:"expires_at"`
+	DestinationUpdatedAt *string         `json:"destination_updated_at"`
 }
 
 type Issue struct {
@@ -68,36 +109,66 @@ func Decode(reader io.Reader) (Envelope, error) {
 		return Envelope{}, errors.New("invalid import JSON")
 	}
 
-	var wire wireEnvelope
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&wire); err != nil {
+	var version versionEnvelope
+	if err := json.Unmarshal(data, &version); err != nil {
 		return Envelope{}, errors.New("invalid import JSON")
 	}
-	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
-		return Envelope{}, errors.New("import must contain exactly one JSON value")
-	}
-	if wire.Version != Version {
-		return Envelope{}, fmt.Errorf("unsupported import version %d", wire.Version)
-	}
-	if wire.Redirects == nil {
-		return Envelope{}, errors.New("invalid import JSON")
-	}
-	envelope := Envelope{Version: wire.Version, Redirects: make([]Redirect, len(*wire.Redirects))}
-	for index, redirect := range *wire.Redirects {
-		if redirect.Disabled == nil {
+	switch version.Version {
+	case LegacyVersion:
+		var wire wireEnvelopeV1
+		if err := decodeStrict(data, &wire); err != nil || wire.Redirects == nil {
 			return Envelope{}, errors.New("invalid import JSON")
 		}
-		envelope.Redirects[index] = Redirect{
-			Slug:     redirect.Slug,
-			URL:      redirect.URL,
-			Disabled: *redirect.Disabled,
+		envelope := Envelope{Version: wire.Version, Redirects: make([]Redirect, len(*wire.Redirects))}
+		for index, redirect := range *wire.Redirects {
+			if redirect.Disabled == nil {
+				return Envelope{}, errors.New("invalid import JSON")
+			}
+			envelope.Redirects[index] = Redirect{Slug: redirect.Slug, URL: redirect.URL, Disabled: *redirect.Disabled}
 		}
+		if err := validate(&envelope); err != nil {
+			return Envelope{}, err
+		}
+		return envelope, nil
+	case Version:
+		var wire wireEnvelopeV2
+		if err := decodeStrict(data, &wire); err != nil || wire.Redirects == nil {
+			return Envelope{}, errors.New("invalid import JSON")
+		}
+		envelope := Envelope{Version: wire.Version, Redirects: make([]Redirect, len(*wire.Redirects))}
+		for index, redirect := range *wire.Redirects {
+			if redirect.Disabled == nil || redirect.ExpiresAt == nil || redirect.DestinationUpdatedAt == nil {
+				return Envelope{}, errors.New("invalid import JSON")
+			}
+			var expiresAt *string
+			if string(redirect.ExpiresAt) != "null" {
+				var raw string
+				if err := json.Unmarshal(redirect.ExpiresAt, &raw); err != nil {
+					return Envelope{}, errors.New("invalid import JSON")
+				}
+				expiresAt = &raw
+			}
+			envelope.Redirects[index] = Redirect{Slug: redirect.Slug, URL: redirect.URL, Disabled: *redirect.Disabled, ExpiresAt: expiresAt, DestinationUpdatedAt: *redirect.DestinationUpdatedAt}
+		}
+		if err := validate(&envelope); err != nil {
+			return Envelope{}, err
+		}
+		return envelope, nil
+	default:
+		return Envelope{}, fmt.Errorf("unsupported import version %d", version.Version)
 	}
-	if err := validate(&envelope); err != nil {
-		return Envelope{}, err
+}
+
+func decodeStrict(data []byte, destination any) error {
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(destination); err != nil {
+		return err
 	}
-	return envelope, nil
+	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
+		return errors.New("import must contain exactly one JSON value")
+	}
+	return nil
 }
 
 func rejectDuplicateObjectFields(data []byte) error {
@@ -166,6 +237,16 @@ func validate(envelope *Envelope) error {
 		}
 		if redirect.URL == "" {
 			issues = append(issues, Issue{Index: index, Field: "url", Message: "empty URL"})
+		}
+		if envelope.Version == Version {
+			if redirect.ExpiresAt != nil {
+				if _, err := time.Parse(time.RFC3339, *redirect.ExpiresAt); err != nil {
+					issues = append(issues, Issue{Index: index, Field: "expires_at", Message: "invalid timestamp"})
+				}
+			}
+			if _, err := time.Parse(time.RFC3339, redirect.DestinationUpdatedAt); err != nil {
+				issues = append(issues, Issue{Index: index, Field: "destination_updated_at", Message: "invalid timestamp"})
+			}
 		}
 	}
 	if len(issues) > 0 {
