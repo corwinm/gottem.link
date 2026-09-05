@@ -142,6 +142,41 @@ func TestAccessStoreDoesNotWaitBehindRollbackJournalReader(t *testing.T) {
 	}
 }
 
+func TestAccessStoreOverridesTimeoutAlias(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "gottem.db")
+	database, err := db.GetDB(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(database.Close)
+	redirect, err := database.CreateRedirect("known", "https://example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows, err := database.Query("SELECT id FROM redirects")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	if !rows.Next() {
+		t.Fatal("missing redirect")
+	}
+
+	store, err := db.OpenAccessStore(path + "?_timeout=5000")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(store.Close)
+	started := time.Now()
+	err = store.RecordRedirectAccess(context.Background(), redirect.ID, time.Now())
+	if err == nil {
+		t.Fatal("access write unexpectedly succeeded while a rollback-journal reader held the lock")
+	}
+	if elapsed := time.Since(started); elapsed > 100*time.Millisecond {
+		t.Fatalf("_timeout alias kept access write blocked for %s", elapsed)
+	}
+}
+
 func TestRealSQLiteRedirectReadsRemainAvailableDuringAccessWrites(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "gottem.db")
 	database, err := db.GetDB(path)

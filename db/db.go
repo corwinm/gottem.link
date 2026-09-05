@@ -61,12 +61,26 @@ func Open(dsn string) (*DbWrapper, error) {
 // OpenAccessStore returns an isolated, single-connection handle for best-effort
 // aggregate writes. It never waits on a rollback-journal lock held by reads.
 func OpenAccessStore(dsn string) (*DbWrapper, error) {
+	dsn = sqliteDSNWithoutParameter(dsn, "_timeout")
 	database, err := sql.Open("sqlite3", sqliteDSNParameter(dsn, "_busy_timeout", "0"))
 	if err != nil {
 		return nil, fmt.Errorf("open access store: %w", err)
 	}
 	database.SetMaxOpenConns(1)
 	return &DbWrapper{database}, nil
+}
+
+func sqliteDSNWithoutParameter(dsn, name string) string {
+	path, rawQuery, found := strings.Cut(dsn, "?")
+	if !found {
+		return dsn
+	}
+	query, err := url.ParseQuery(rawQuery)
+	if err != nil {
+		return dsn
+	}
+	query.Del(name)
+	return path + "?" + query.Encode()
 }
 
 func sqliteDSNParameter(dsn, name, value string) string {

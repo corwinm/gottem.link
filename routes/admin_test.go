@@ -83,7 +83,7 @@ func TestAdminPageAndAssetsSecurityAndAccessibilityContracts(t *testing.T) {
 		contains    []string
 	}{
 		{path: "/admin/assets/admin.css", contentType: "text/css; charset=utf-8", contains: []string{"--paper: #eeeae1", "--ink: #26251f", "--accent: #e3b94e", "--signal: #765400", "Arial Black", "Georgia", "Courier New", ".button.header-button", "min-height: 44px", ":focus-visible", ".status.expired", "@media (max-width:", "prefers-reduced-motion"}},
-		{path: "/admin/assets/admin.js", contentType: "text/javascript; charset=utf-8", contains: []string{"textContent", "navigator.clipboard", "fetch(", "confirmDelete", "redirectStatus", "expires_at", "destination_updated_at", "click_count", "last_accessed_at", "expirationDialog.showModal()"}},
+		{path: "/admin/assets/admin.js", contentType: "text/javascript; charset=utf-8", contains: []string{"textContent", "navigator.clipboard", "fetch(", "confirmDelete", "redirectStatus", "expires_at", "destination_updated_at", "click_count", "last_accessed_at", "approximately", "expirationDialog.showModal()"}},
 	} {
 		response := httptest.NewRecorder()
 		router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, asset.path, nil))
