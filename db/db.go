@@ -227,7 +227,7 @@ func (db *DbWrapper) Ready(ctx context.Context) error {
 
 func (db *DbWrapper) QuerySlug(slug string) (string, error) {
 	var url string
-	err := db.QueryRow("SELECT url FROM redirects WHERE slug = ? AND disabled_at IS NULL AND (expires_at IS NULL OR datetime(expires_at) > CURRENT_TIMESTAMP)", slug).Scan(&url)
+	err := db.QueryRow("SELECT url FROM redirects WHERE slug = ? AND disabled_at IS NULL AND (expires_at IS NULL OR julianday(expires_at) > julianday('now'))", slug).Scan(&url)
 	if err != nil {
 		return "", err
 	}

@@ -65,7 +65,7 @@ func TestAdminPageAndAssetsSecurityAndAccessibilityContracts(t *testing.T) {
 		`brand-wordmark`, `gottem<span>.link</span>`, `id="create-form"`, `id="create-expiration"`, `type="datetime-local"`,
 		`id="search"`, `role="status"`, `aria-live="polite"`, `<template id="redirect-template"`,
 		`class="expiration-detail"`, `class="destination-updated"`, `class="button quiet expiration"`,
-		`id="expiration-dialog"`, `id="expiration-form"`, `id="expiration-value"`, `id="clear-expiration"`,
+		`id="expiration-dialog"`, `id="expiration-form"`, `id="expiration-value"`, `step="0.001"`, `id="expiration-error"`, `role="alert"`, `id="clear-expiration"`,
 		`id="delete-dialog"`, `<script src="/admin/assets/admin.js" defer></script>`,
 		`<link rel="stylesheet" href="/admin/assets/admin.css">`,
 	} {
@@ -104,6 +104,11 @@ func TestAdminPageAndAssetsSecurityAndAccessibilityContracts(t *testing.T) {
 				`deleteDialog.returnValue = "cancel"`,
 				"const shortURL = `${location.origin}/${encodeURIComponent(redirect.slug)}`",
 				"`${value.replace(\" \", \"T\")}Z`",
+				"originalExpirationValue",
+				"scheduleStatusRefresh()",
+				`document.addEventListener("visibilitychange"`,
+				"expirationError.textContent = error.message",
+				"if (expirationDialog.open) expirationDialog.close()",
 				"catch (error) {\n    setNotice(error.message);\n    return;\n  }\n  redirects = [];",
 			} {
 				if !strings.Contains(response.Body.String(), contract) {

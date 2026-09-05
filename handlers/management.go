@@ -218,7 +218,7 @@ func validateExpiration(value *string) (*string, error) {
 	if err != nil {
 		return nil, err
 	}
-	canonical := parsed.UTC().Format(time.RFC3339)
+	canonical := parsed.UTC().Format(time.RFC3339Nano)
 	return &canonical, nil
 }
 
@@ -236,7 +236,7 @@ func portableOptionalTimestamp(value *string) (*string, error) {
 func portableTimestamp(value string) (string, error) {
 	for _, layout := range []string{time.RFC3339, "2006-01-02 15:04:05"} {
 		if parsed, err := time.Parse(layout, value); err == nil {
-			return parsed.UTC().Format(time.RFC3339), nil
+			return parsed.UTC().Format(time.RFC3339Nano), nil
 		}
 	}
 	return "", errors.New("invalid timestamp")

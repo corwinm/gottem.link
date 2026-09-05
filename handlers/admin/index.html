@@ -96,7 +96,8 @@
       <h2 id="expiration-title">Set expiration</h2>
       <p id="expiration-message" class="muted"></p>
       <label for="expiration-value">Expiration date and time</label>
-      <input id="expiration-value" name="expires_at" type="datetime-local" required>
+      <input id="expiration-value" name="expires_at" type="datetime-local" step="0.001" aria-describedby="expiration-message expiration-error" required>
+      <p id="expiration-error" class="dialog-error" role="alert"></p>
       <div class="dialog-actions split-actions">
         <button id="clear-expiration" class="button quiet" type="button">Clear expiration</button>
         <span class="dialog-action-group">

@@ -82,6 +82,7 @@ input::placeholder { color: #7c786e; }
  dialog { width: min(100% - 32px, 500px); padding: 28px; color: var(--ink); background: var(--paper); border: 2px solid var(--ink); border-radius: 0; box-shadow: 14px 14px 0 rgb(38 37 31 / .24); }
 dialog::backdrop { background: rgb(38 37 31 / .56); }
 #expiration-form { display: grid; gap: 10px; }
+.dialog-error { min-height: 1.4em; margin: 0; color: var(--signal); font-size: .9rem; }
 .dialog-actions { display: flex; justify-content: end; gap: 8px; margin-top: 24px; }
 .split-actions { justify-content: space-between; align-items: center; }
 .dialog-action-group { display: flex; gap: 8px; }

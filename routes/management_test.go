@@ -109,26 +109,26 @@ func TestManagementAPIExpirationLifecycle(t *testing.T) {
 	t.Cleanup(database.Close)
 	router := routes.NewRouter(database, testManagementToken)
 
-	createdResponse := managementRequest(t, router, http.MethodPost, "/api/v1/redirects", `{"slug":"timed","url":"https://example.com/one","expires_at":"2999-01-01T00:00:00Z"}`, testManagementToken)
+	createdResponse := managementRequest(t, router, http.MethodPost, "/api/v1/redirects", `{"slug":"timed","url":"https://example.com/one","expires_at":"2999-01-01T00:00:00.123456789Z"}`, testManagementToken)
 	if createdResponse.Code != http.StatusCreated {
 		t.Fatalf("create status/body = %d/%s", createdResponse.Code, createdResponse.Body.String())
 	}
 	var created db.Redirect
 	decodeJSON(t, createdResponse, &created)
-	if created.ExpiresAt == nil || *created.ExpiresAt != "2999-01-01T00:00:00Z" || created.DestinationUpdatedAt == "" {
+	if created.ExpiresAt == nil || *created.ExpiresAt != "2999-01-01T00:00:00.123456789Z" || created.DestinationUpdatedAt == "" {
 		t.Fatalf("created redirect = %#v", created)
 	}
 	if _, err := database.Exec(`UPDATE redirects SET destination_updated_at = '2026-01-01 00:00:00' WHERE slug = 'timed'`); err != nil {
 		t.Fatal(err)
 	}
 
-	expiredResponse := managementRequest(t, router, http.MethodPut, "/api/v1/redirects/timed/expiration", `{"expires_at":"2000-01-01T00:00:00Z"}`, testManagementToken)
+	expiredResponse := managementRequest(t, router, http.MethodPut, "/api/v1/redirects/timed/expiration", `{"expires_at":"2000-01-01T00:00:00.987654321Z"}`, testManagementToken)
 	if expiredResponse.Code != http.StatusOK {
 		t.Fatalf("expire status/body = %d/%s", expiredResponse.Code, expiredResponse.Body.String())
 	}
 	var expired db.Redirect
 	decodeJSON(t, expiredResponse, &expired)
-	if expired.ExpiresAt == nil || *expired.ExpiresAt != "2000-01-01T00:00:00Z" || expired.DestinationUpdatedAt != "2026-01-01 00:00:00" {
+	if expired.ExpiresAt == nil || *expired.ExpiresAt != "2000-01-01T00:00:00.987654321Z" || expired.DestinationUpdatedAt != "2026-01-01 00:00:00" {
 		t.Fatalf("expired redirect = %#v", expired)
 	}
 	public := httptest.NewRecorder()
@@ -277,16 +277,16 @@ func TestPortableExportPreservesLifecycleFieldsAndImportsV1(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(database.Close)
-	future := "2999-01-01T00:00:00Z"
+	future := "2999-01-01T00:00:00.123456789Z"
 	if _, err := database.CreateRedirectWithExpiration("timed", "https://example.com/timed", &future); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := database.Exec(`UPDATE redirects SET destination_updated_at = '2029-01-02T03:04:05Z' WHERE slug = 'timed'`); err != nil {
+	if _, err := database.Exec(`UPDATE redirects SET destination_updated_at = '2029-01-02T03:04:05.987654321Z' WHERE slug = 'timed'`); err != nil {
 		t.Fatal(err)
 	}
 	router := routes.NewRouter(database, testManagementToken)
 	exported := managementRequest(t, router, http.MethodGet, "/api/v1/exports", "", testManagementToken)
-	want := `{"version":2,"redirects":[{"slug":"timed","url":"https://example.com/timed","disabled":false,"expires_at":"2999-01-01T00:00:00Z","destination_updated_at":"2029-01-02T03:04:05Z"}]}` + "\n"
+	want := `{"version":2,"redirects":[{"slug":"timed","url":"https://example.com/timed","disabled":false,"expires_at":"2999-01-01T00:00:00.123456789Z","destination_updated_at":"2029-01-02T03:04:05.987654321Z"}]}` + "\n"
 	if exported.Code != http.StatusOK || exported.Body.String() != want {
 		t.Fatalf("export status/body = %d/%q, want 200/%q", exported.Code, exported.Body.String(), want)
 	}
@@ -307,7 +307,7 @@ func TestPortableExportPreservesLifecycleFieldsAndImportsV1(t *testing.T) {
 		}
 	}
 	timed, err := destination.GetRedirect("timed")
-	if err != nil || timed.ExpiresAt == nil || *timed.ExpiresAt != future || timed.DestinationUpdatedAt != "2029-01-02T03:04:05Z" {
+	if err != nil || timed.ExpiresAt == nil || *timed.ExpiresAt != future || timed.DestinationUpdatedAt != "2029-01-02T03:04:05.987654321Z" {
 		t.Fatalf("imported timed redirect = %#v, %v", timed, err)
 	}
 	legacy, err := destination.GetRedirect("legacy")
