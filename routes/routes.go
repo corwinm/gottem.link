@@ -67,6 +67,7 @@ func newRouterWithAdmin(database *db.DbWrapper, managementToken, backupToken str
 		router.Handle("/api/v1/redirects/{slug}", managementAuth(handlers.ManagementItemHandler(database)))
 		router.Handle("/api/v1/redirects/{slug}/disable", managementAuth(handlers.ManagementDisableHandler(database)))
 		router.Handle("/api/v1/redirects/{slug}/enable", managementAuth(handlers.ManagementEnableHandler(database)))
+		router.Handle("/api/v1/redirects/{slug}/expiration", managementAuth(handlers.ManagementExpirationHandler(database)))
 	}
 	router.HandleFunc("/{slug}", handlers.RedirectHandler(database))
 	router.HandleFunc("/{$}", handlers.HomeHandler)

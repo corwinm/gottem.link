@@ -16,18 +16,22 @@ var (
 )
 
 type Redirect struct {
-	ID         int64   `json:"id"`
-	Slug       string  `json:"slug"`
-	URL        string  `json:"url"`
-	CreatedAt  string  `json:"created_at"`
-	UpdatedAt  string  `json:"updated_at"`
-	DisabledAt *string `json:"disabled_at"`
+	ID                   int64   `json:"id"`
+	Slug                 string  `json:"slug"`
+	URL                  string  `json:"url"`
+	CreatedAt            string  `json:"created_at"`
+	UpdatedAt            string  `json:"updated_at"`
+	DisabledAt           *string `json:"disabled_at"`
+	ExpiresAt            *string `json:"expires_at"`
+	DestinationUpdatedAt string  `json:"destination_updated_at"`
 }
 
 type ImportRedirect struct {
-	Slug     string
-	URL      string
-	Disabled bool
+	Slug                 string
+	URL                  string
+	Disabled             bool
+	ExpiresAt            *string
+	DestinationUpdatedAt string
 }
 
 type SlugConflictsError struct {
@@ -38,14 +42,18 @@ func (err *SlugConflictsError) Error() string {
 	return "slug conflicts: " + strings.Join(err.Slugs, ", ")
 }
 
-const redirectColumns = "id, slug, url, created_at, updated_at, disabled_at"
+const redirectColumns = "id, slug, url, created_at, updated_at, disabled_at, expires_at, destination_updated_at"
 
 func (db *DbWrapper) CreateRedirect(slug, url string) (Redirect, error) {
+	return db.CreateRedirectWithExpiration(slug, url, nil)
+}
+
+func (db *DbWrapper) CreateRedirectWithExpiration(slug, url string, expiresAt *string) (Redirect, error) {
 	redirect, err := scanRedirect(db.QueryRow(`
-		INSERT INTO redirects (slug, url)
-		VALUES (?, ?)
+		INSERT INTO redirects (slug, url, expires_at)
+		VALUES (?, ?, ?)
 		RETURNING `+redirectColumns,
-		slug, url,
+		slug, url, expiresAt,
 	))
 	if isUniqueConstraint(err) {
 		return Redirect{}, ErrSlugConflict
@@ -101,9 +109,9 @@ func (db *DbWrapper) ImportRedirects(redirects []ImportRedirect) error {
 
 	for _, redirect := range redirects {
 		_, err := tx.Exec(`
-			INSERT INTO redirects (slug, url, disabled_at)
-			VALUES (?, ?, CASE WHEN ? THEN CURRENT_TIMESTAMP ELSE NULL END)
-		`, redirect.Slug, redirect.URL, redirect.Disabled)
+			INSERT INTO redirects (slug, url, disabled_at, expires_at, destination_updated_at)
+			VALUES (?, ?, CASE WHEN ? THEN CURRENT_TIMESTAMP ELSE NULL END, ?, COALESCE(NULLIF(?, ''), CURRENT_TIMESTAMP))
+		`, redirect.Slug, redirect.URL, redirect.Disabled, redirect.ExpiresAt, redirect.DestinationUpdatedAt)
 		if isUniqueConstraint(err) {
 			return &SlugConflictsError{Slugs: []string{sqliteNOCASEName(redirect.Slug)}}
 		}
@@ -149,7 +157,7 @@ func (db *DbWrapper) GetRedirect(slug string) (Redirect, error) {
 func (db *DbWrapper) UpdateRedirect(slug, url string) (Redirect, error) {
 	redirect, err := scanRedirect(db.QueryRow(`
 		UPDATE redirects
-		SET url = ?, updated_at = CURRENT_TIMESTAMP
+		SET url = ?, updated_at = CURRENT_TIMESTAMP, destination_updated_at = CURRENT_TIMESTAMP
 		WHERE slug = ?
 		RETURNING `+redirectColumns,
 		url, slug,
@@ -197,6 +205,23 @@ func (db *DbWrapper) EnableRedirect(slug string) (Redirect, error) {
 	return redirect, nil
 }
 
+func (db *DbWrapper) SetRedirectExpiration(slug string, expiresAt *string) (Redirect, error) {
+	redirect, err := scanRedirect(db.QueryRow(`
+		UPDATE redirects
+		SET expires_at = ?, updated_at = CURRENT_TIMESTAMP
+		WHERE slug = ?
+		RETURNING `+redirectColumns,
+		expiresAt, slug,
+	))
+	if errors.Is(err, sql.ErrNoRows) {
+		return Redirect{}, ErrRedirectNotFound
+	}
+	if err != nil {
+		return Redirect{}, fmt.Errorf("set redirect expiration: %w", err)
+	}
+	return redirect, nil
+}
+
 func (db *DbWrapper) InsertRedirect(slug, url string) error {
 	_, err := db.CreateRedirect(slug, url)
 	return err
@@ -223,7 +248,7 @@ type redirectScanner interface {
 
 func scanRedirect(scanner redirectScanner) (Redirect, error) {
 	var redirect Redirect
-	var disabledAt sql.NullString
+	var disabledAt, expiresAt sql.NullString
 	if err := scanner.Scan(
 		&redirect.ID,
 		&redirect.Slug,
@@ -231,11 +256,16 @@ func scanRedirect(scanner redirectScanner) (Redirect, error) {
 		&redirect.CreatedAt,
 		&redirect.UpdatedAt,
 		&disabledAt,
+		&expiresAt,
+		&redirect.DestinationUpdatedAt,
 	); err != nil {
 		return Redirect{}, err
 	}
 	if disabledAt.Valid {
 		redirect.DisabledAt = &disabledAt.String
+	}
+	if expiresAt.Valid {
+		redirect.ExpiresAt = &expiresAt.String
 	}
 	return redirect, nil
 }

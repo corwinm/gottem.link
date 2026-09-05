@@ -83,6 +83,59 @@ func TestCreateRedirectReturnsSlugConflict(t *testing.T) {
 	}
 }
 
+func TestRedirectExpirationAndDestinationAudit(t *testing.T) {
+	database, err := db.GetDB(filepath.Join(t.TempDir(), "gottem.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(database.Close)
+
+	future := "2999-01-01T00:00:00Z"
+	created, err := database.CreateRedirectWithExpiration("known", "https://example.com/one", &future)
+	if err != nil {
+		t.Fatalf("create expiring redirect: %v", err)
+	}
+	if created.ExpiresAt == nil || *created.ExpiresAt != future || created.DestinationUpdatedAt == "" {
+		t.Fatalf("created redirect = %#v", created)
+	}
+	if destination, err := database.QuerySlug("known"); err != nil || destination != created.URL {
+		t.Fatalf("future redirect = %q, %v", destination, err)
+	}
+
+	if _, err := database.Exec(`UPDATE redirects SET updated_at = '2026-01-01 00:00:00', destination_updated_at = '2026-01-01 00:00:00' WHERE slug = 'known'`); err != nil {
+		t.Fatal(err)
+	}
+	disabled, err := database.DisableRedirect("known")
+	if err != nil || disabled.DestinationUpdatedAt != "2026-01-01 00:00:00" || disabled.UpdatedAt == "2026-01-01 00:00:00" {
+		t.Fatalf("disabled redirect = %#v, %v", disabled, err)
+	}
+	enabled, err := database.EnableRedirect("known")
+	if err != nil || enabled.DestinationUpdatedAt != "2026-01-01 00:00:00" {
+		t.Fatalf("enabled redirect = %#v, %v", enabled, err)
+	}
+
+	past := "2000-01-01T00:00:00Z"
+	expired, err := database.SetRedirectExpiration("known", &past)
+	if err != nil || expired.ExpiresAt == nil || *expired.ExpiresAt != past || expired.DestinationUpdatedAt != "2026-01-01 00:00:00" {
+		t.Fatalf("expired redirect = %#v, %v", expired, err)
+	}
+	if _, err := database.QuerySlug("known"); !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("expired public query error = %v, want %v", err, sql.ErrNoRows)
+	}
+	if _, err := database.CreateRedirect("KNOWN", "https://example.com/reused"); !errors.Is(err, db.ErrSlugConflict) {
+		t.Fatalf("expired slug reuse error = %v, want %v", err, db.ErrSlugConflict)
+	}
+
+	cleared, err := database.SetRedirectExpiration("known", nil)
+	if err != nil || cleared.ExpiresAt != nil || cleared.DestinationUpdatedAt != "2026-01-01 00:00:00" {
+		t.Fatalf("cleared expiration redirect = %#v, %v", cleared, err)
+	}
+	updated, err := database.UpdateRedirect("known", "https://example.com/two")
+	if err != nil || updated.DestinationUpdatedAt == "2026-01-01 00:00:00" || updated.DestinationUpdatedAt != updated.UpdatedAt {
+		t.Fatalf("destination-updated redirect = %#v, %v", updated, err)
+	}
+}
+
 func TestImportConflictReportsPreserveNonASCIICase(t *testing.T) {
 	database, err := db.GetDB(filepath.Join(t.TempDir(), "gottem.db"))
 	if err != nil {

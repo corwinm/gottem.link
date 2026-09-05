@@ -17,13 +17,14 @@ The multi-segment namespace keeps these operational routes from shadowing existi
 
 Set `GOTTEM_MANAGEMENT_TOKEN` to enable redirect management and imports; those requests accept its bearer credential. When the admin UI is fully configured as described in the README, redirect management and imports also accept its signed browser session cookie, with exact-origin enforcement on unsafe methods. `GET /api/v1/exports` remains bearer-only and accepts either the management credential or the distinct read-only `GOTTEM_BACKUP_TOKEN`. Public redirects remain unauthenticated. Tokens are read from the environment, compared in constant time, and never included in responses or logs. If neither token is configured, `/api/` returns 404; with only a backup token, other API routes remain unavailable.
 
-- `POST /api/v1/redirects` with `{"slug":"name","url":"https://example.com"}` creates a redirect.
+- `POST /api/v1/redirects` with `{"slug":"name","url":"https://example.com","expires_at":"2030-01-02T03:04:05Z"}` creates a redirect; `expires_at` is optional.
 - `GET /api/v1/redirects` lists redirects, including disabled entries.
 - `GET /api/v1/exports` returns the compact versioned portable export.
 - `GET /api/v1/redirects/{slug}` inspects one redirect.
 - `PUT /api/v1/redirects/{slug}` with `{"url":"https://example.com/new"}` replaces its destination.
 - `POST /api/v1/redirects/{slug}/disable` disables public resolution.
 - `POST /api/v1/redirects/{slug}/enable` restores public resolution.
+- `PUT /api/v1/redirects/{slug}/expiration` with an RFC3339 `expires_at` sets expiration; `{"expires_at":null}` clears it.
 - `DELETE /api/v1/redirects/{slug}` permanently removes it.
 - `POST /api/v1/imports?dry_run=true` validates a versioned portable export without writing; omit the query to import it atomically.
 
@@ -35,7 +36,7 @@ Responses are JSON except successful deletion, which returns 204. Validation fai
 
 `run-app -migrate-only -dsn PATH` is the only production schema-writing mode. LiteFS runs it only on candidate nodes after mount and synchronization; `lease.promote: true` makes that candidate the writer before the command runs. Normal server startup uses `db.Open`, which does not connect, create tables, or migrate.
 
-Schema version 1 introduced case-insensitively unique, non-null slugs; non-null destinations; and creation/update timestamps. Version 2 adds the nullable disable timestamp used by management operations. Migration from the legacy version-0 table is transactional, preserves IDs and destinations, and fails without changing the original database when legacy rows violate the new constraints. Versions newer than the binary supports are rejected.
+Schema version 1 introduced case-insensitively unique, non-null slugs; non-null destinations; and creation/update timestamps. Version 2 adds the nullable disable timestamp used by management operations. Version 3 adds nullable expiration and the non-null destination-change timestamp, backfilled from each row's existing update timestamp. Migration from the legacy version-0 table is transactional, preserves IDs and destinations, and fails without changing the original database when legacy rows violate the new constraints. Versions newer than the binary supports are rejected.
 
 Before merging a schema change, export and validate a production backup, run `make container-test`, and confirm that live machine/volume regions still match `primary_region`. After deployment, verify schema version, row count, readiness, and known redirects.
 

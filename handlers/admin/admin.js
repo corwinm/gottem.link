@@ -12,11 +12,18 @@ const emptyState = document.querySelector("#empty-state");
 const filterEmptyState = document.querySelector("#filter-empty-state");
 const list = document.querySelector("#redirect-list");
 const template = document.querySelector("#redirect-template");
+const expirationDialog = document.querySelector("#expiration-dialog");
+const expirationForm = document.querySelector("#expiration-form");
+const expirationTitle = document.querySelector("#expiration-title");
+const expirationMessage = document.querySelector("#expiration-message");
+const expirationValue = document.querySelector("#expiration-value");
+const clearExpiration = document.querySelector("#clear-expiration");
 const deleteDialog = document.querySelector("#delete-dialog");
 const deleteMessage = document.querySelector("#delete-message");
 const confirmDelete = document.querySelector("#confirm-delete");
 let redirects = [];
 let pendingDelete = null;
+let pendingExpiration = null;
 
 function setAuthenticated(authenticated) {
   loginView.hidden = authenticated;
@@ -65,6 +72,30 @@ async function loadRedirects() {
   }
 }
 
+function redirectStatus(redirect) {
+  if (redirect.disabled_at !== null) return "disabled";
+  if (redirect.expires_at !== null && Date.parse(redirect.expires_at) <= Date.now()) return "expired";
+  return "active";
+}
+
+function parseTimestamp(value) {
+  const normalized = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(value) ? `${value.replace(" ", "T")}Z` : value;
+  return new Date(normalized);
+}
+
+function formatTimestamp(value) {
+  const parsed = parseTimestamp(value);
+  return Number.isNaN(parsed.valueOf()) ? value : parsed.toLocaleString([], { dateStyle: "medium", timeStyle: "short" });
+}
+
+function toDatetimeLocal(value) {
+  if (value === null) return "";
+  const parsed = parseTimestamp(value);
+  if (Number.isNaN(parsed.valueOf())) return "";
+  const local = new Date(parsed.getTime() - parsed.getTimezoneOffset() * 60000);
+  return local.toISOString().slice(0, 16);
+}
+
 function renderRedirects() {
   list.replaceChildren();
   const query = searchInput.value.trim().toLowerCase();
@@ -81,10 +112,15 @@ function renderRedirects() {
     link.href = shortURL;
     link.textContent = `/${redirect.slug}`;
     card.querySelector(".destination").textContent = redirect.url;
+    const state = redirectStatus(redirect);
     const status = card.querySelector(".status");
-    const disabled = redirect.disabled_at !== null;
-    status.textContent = disabled ? "Disabled" : "Active";
-    status.classList.toggle("disabled", disabled);
+    status.textContent = state[0].toUpperCase() + state.slice(1);
+    status.classList.toggle("disabled", state === "disabled");
+    status.classList.toggle("expired", state === "expired");
+    const expirationDetail = card.querySelector(".expiration-detail");
+    expirationDetail.hidden = redirect.expires_at === null;
+    if (redirect.expires_at !== null) expirationDetail.textContent = formatTimestamp(redirect.expires_at);
+    card.querySelector(".destination-updated").textContent = formatTimestamp(redirect.destination_updated_at);
 
     card.querySelector(".copy").addEventListener("click", async () => {
       try {
@@ -95,8 +131,9 @@ function renderRedirects() {
       }
     });
     card.querySelector(".edit").addEventListener("click", () => editRedirect(redirect));
+    card.querySelector(".expiration").addEventListener("click", () => openExpirationDialog(redirect));
     const toggle = card.querySelector(".toggle");
-    toggle.textContent = disabled ? "Enable" : "Disable";
+    toggle.textContent = redirect.disabled_at === null ? "Disable" : "Enable";
     toggle.addEventListener("click", () => toggleRedirect(redirect));
     card.querySelector(".delete").addEventListener("click", () => openDeleteDialog(redirect));
     list.append(card);
@@ -123,6 +160,33 @@ async function toggleRedirect(redirect) {
   try {
     await api(`/api/v1/redirects/${encodeURIComponent(redirect.slug)}/${action}`, { method: "POST" });
     setNotice(`${action === "enable" ? "Enabled" : "Disabled"} /${redirect.slug}`, true);
+    await loadRedirects();
+  } catch (error) {
+    setNotice(error.message);
+  }
+}
+
+function openExpirationDialog(redirect) {
+  pendingExpiration = redirect;
+  expirationTitle.textContent = redirect.expires_at === null ? "Set expiration" : "Change expiration";
+  expirationMessage.textContent = `Choose when /${redirect.slug} should stop redirecting.`;
+  expirationValue.value = toDatetimeLocal(redirect.expires_at);
+  clearExpiration.hidden = redirect.expires_at === null;
+  expirationDialog.showModal();
+  expirationValue.focus();
+}
+
+async function saveExpiration(expiresAt) {
+  if (pendingExpiration === null) return;
+  const redirect = pendingExpiration;
+  try {
+    await api(`/api/v1/redirects/${encodeURIComponent(redirect.slug)}/expiration`, {
+      method: "PUT",
+      body: JSON.stringify({ expires_at: expiresAt }),
+    });
+    expirationDialog.close();
+    pendingExpiration = null;
+    setNotice(`${expiresAt === null ? "Cleared expiration for" : "Updated expiration for"} /${redirect.slug}`, true);
     await loadRedirects();
   } catch (error) {
     setNotice(error.message);
@@ -160,8 +224,10 @@ createForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   const data = new FormData(createForm);
   const slug = String(data.get("slug")).trim();
+  const rawExpiration = String(data.get("expires_at")).trim();
   const payload = { url: String(data.get("url")).trim() };
   if (slug) payload.slug = slug;
+  if (rawExpiration) payload.expires_at = new Date(rawExpiration).toISOString();
   const submit = createForm.querySelector("button[type=submit]");
   submit.disabled = true;
   try {
@@ -175,6 +241,14 @@ createForm.addEventListener("submit", async (event) => {
     submit.disabled = false;
   }
 });
+
+expirationForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  await saveExpiration(new Date(expirationValue.value).toISOString());
+});
+clearExpiration.addEventListener("click", () => saveExpiration(null));
+document.querySelector("[data-close-expiration]").addEventListener("click", () => expirationDialog.close());
+expirationDialog.addEventListener("close", () => { pendingExpiration = null; });
 
 searchInput.addEventListener("input", renderRedirects);
 logoutButton.addEventListener("click", async () => {

@@ -20,11 +20,11 @@ The local server listens on `:8080` and stores data in `./gottem.db`. Override e
 go run . -addr :3000 -dsn /path/to/gottem.db
 ```
 
-Set `GOTTEM_MANAGEMENT_TOKEN` to enable the private JSON management API. `GOTTEM_BACKUP_TOKEN` may separately grant read-only access to the export endpoint; it cannot access redirect management, imports, or browser sessions. Without either token, `/api/` returns 404. Creating a redirect accepts an optional `slug`; omitted or `null` slugs are generated automatically, while custom slugs are validated and stored in lowercase.
+Set `GOTTEM_MANAGEMENT_TOKEN` to enable the private JSON management API. `GOTTEM_BACKUP_TOKEN` may separately grant read-only access to the export endpoint; it cannot access redirect management, imports, or browser sessions. Without either token, `/api/` returns 404. Creating a redirect accepts an optional `slug` and RFC3339 `expires_at`; omitted or `null` slugs are generated automatically, while custom slugs are validated and stored in lowercase. Expired and disabled links return 404 publicly but remain inspectable, and their slugs remain reserved. `destination_updated_at` records only the latest destination replacement; `updated_at` continues to record any lifecycle mutation.
 
 ### Admin web UI
 
-The optional dependency-free admin console is served at `/admin`. It uses the existing JSON management API and includes create, search, copy, edit, disable/enable, and confirmed delete flows. Configure it with the management token plus two additional values:
+The optional dependency-free admin console is served at `/admin`. It uses the existing JSON management API and includes create, search, copy, edit, expiration, disable/enable, and confirmed delete flows. Active, disabled, and expired states are shown separately. Configure it with the management token plus two additional values:
 
 ```sh
 export GOTTEM_MANAGEMENT_TOKEN='...'
@@ -55,11 +55,13 @@ export GOTTEM_MANAGEMENT_TOKEN='...'
 The CLI targets `https://gottem.link` by default. Set `GOTTEM_BASE_URL` for another server, or pass `--base-url URL` to override it for one command. Global flags must appear before the command.
 
 ```sh
-gottem create [--slug SLUG] URL
+gottem create [--slug SLUG] [--expires-at RFC3339] URL
 gottem list
 gottem get SLUG
 gottem update SLUG URL
 gottem disable SLUG
+gottem expire SLUG RFC3339
+gottem unexpire SLUG
 gottem delete [--force] SLUG
 gottem export
 gottem import [--apply] FILE

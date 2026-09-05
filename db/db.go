@@ -8,7 +8,7 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
-const currentSchemaVersion = 2
+const currentSchemaVersion = 3
 
 const redirectsV1Schema = `(
 	id INTEGER PRIMARY KEY,
@@ -16,6 +16,17 @@ const redirectsV1Schema = `(
 	url TEXT NOT NULL,
 	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
 	updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+)`
+
+const redirectsV3Schema = `(
+	id INTEGER PRIMARY KEY,
+	slug TEXT NOT NULL COLLATE NOCASE UNIQUE,
+	url TEXT NOT NULL,
+	created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+	disabled_at TEXT,
+	expires_at TEXT,
+	destination_updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 )`
 
 type DbWrapper struct {
@@ -71,6 +82,8 @@ func migrate(database *sql.DB) error {
 			err = migrateToVersion1(database)
 		case 1:
 			err = migrateToVersion2(database)
+		case 2:
+			err = migrateToVersion3(database)
 		}
 		if err != nil {
 			return err
@@ -146,6 +159,38 @@ func migrateToVersion2(database *sql.DB) error {
 	return nil
 }
 
+func migrateToVersion3(database *sql.DB) error {
+	tx, err := database.Begin()
+	if err != nil {
+		return fmt.Errorf("begin version 3 migration: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if _, err := tx.Exec("CREATE TABLE redirects_migration " + redirectsV3Schema); err != nil {
+		return fmt.Errorf("create version 3 redirects table: %w", err)
+	}
+	if _, err := tx.Exec(`
+		INSERT INTO redirects_migration (id, slug, url, created_at, updated_at, disabled_at, destination_updated_at)
+		SELECT id, slug, url, created_at, updated_at, disabled_at, updated_at
+		FROM redirects
+	`); err != nil {
+		return fmt.Errorf("copy version 2 redirects: %w", err)
+	}
+	if _, err := tx.Exec("DROP TABLE redirects"); err != nil {
+		return fmt.Errorf("drop version 2 redirects table: %w", err)
+	}
+	if _, err := tx.Exec("ALTER TABLE redirects_migration RENAME TO redirects"); err != nil {
+		return fmt.Errorf("activate version 3 redirects table: %w", err)
+	}
+	if _, err := tx.Exec("PRAGMA user_version = 3"); err != nil {
+		return fmt.Errorf("record schema version 3: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit version 3 migration: %w", err)
+	}
+	return nil
+}
+
 func (dbWrapper *DbWrapper) Close() {
 	dbWrapper.db.Close()
 }
@@ -173,7 +218,7 @@ func (db *DbWrapper) Ready(ctx context.Context) error {
 	if version != currentSchemaVersion {
 		return fmt.Errorf("database schema version %d, want %d", version, currentSchemaVersion)
 	}
-	rows, err := db.db.QueryContext(ctx, "SELECT disabled_at FROM redirects LIMIT 0")
+	rows, err := db.db.QueryContext(ctx, "SELECT disabled_at, expires_at, destination_updated_at FROM redirects LIMIT 0")
 	if err != nil {
 		return err
 	}
@@ -182,7 +227,7 @@ func (db *DbWrapper) Ready(ctx context.Context) error {
 
 func (db *DbWrapper) QuerySlug(slug string) (string, error) {
 	var url string
-	err := db.QueryRow("SELECT url FROM redirects WHERE slug = ? AND disabled_at IS NULL", slug).Scan(&url)
+	err := db.QueryRow("SELECT url FROM redirects WHERE slug = ? AND disabled_at IS NULL AND (expires_at IS NULL OR datetime(expires_at) > CURRENT_TIMESTAMP)", slug).Scan(&url)
 	if err != nil {
 		return "", err
 	}

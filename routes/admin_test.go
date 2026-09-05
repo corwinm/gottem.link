@@ -62,8 +62,11 @@ func TestAdminPageAndAssetsSecurityAndAccessibilityContracts(t *testing.T) {
 	markup := page.Body.String()
 	for _, required := range []string{
 		`<main`, `id="login-form"`, `type="password"`, `autocomplete="current-password"`,
-		`id="create-form"`, `id="search"`, `role="status"`, `aria-live="polite"`,
-		`<template id="redirect-template"`, `id="delete-dialog"`, `<script src="/admin/assets/admin.js" defer></script>`,
+		`brand-wordmark`, `gottem<span>.link</span>`, `id="create-form"`, `id="create-expiration"`, `type="datetime-local"`,
+		`id="search"`, `role="status"`, `aria-live="polite"`, `<template id="redirect-template"`,
+		`class="expiration-detail"`, `class="destination-updated"`, `class="button quiet expiration"`,
+		`id="expiration-dialog"`, `id="expiration-form"`, `id="expiration-value"`, `id="clear-expiration"`,
+		`id="delete-dialog"`, `<script src="/admin/assets/admin.js" defer></script>`,
 		`<link rel="stylesheet" href="/admin/assets/admin.css">`,
 	} {
 		if !strings.Contains(markup, required) {
@@ -79,8 +82,8 @@ func TestAdminPageAndAssetsSecurityAndAccessibilityContracts(t *testing.T) {
 		contentType string
 		contains    []string
 	}{
-		{path: "/admin/assets/admin.css", contentType: "text/css; charset=utf-8", contains: []string{"min-height: 44px", ":focus-visible", "@media (max-width:", "prefers-reduced-motion"}},
-		{path: "/admin/assets/admin.js", contentType: "text/javascript; charset=utf-8", contains: []string{"textContent", "navigator.clipboard", "fetch(", "confirmDelete"}},
+		{path: "/admin/assets/admin.css", contentType: "text/css; charset=utf-8", contains: []string{"--paper: #eeeae1", "--ink: #26251f", "--accent: #e79778", "Arial Black", "Georgia", "Courier New", ".button.header-button", "min-height: 44px", ":focus-visible", ".status.expired", "@media (max-width:", "prefers-reduced-motion"}},
+		{path: "/admin/assets/admin.js", contentType: "text/javascript; charset=utf-8", contains: []string{"textContent", "navigator.clipboard", "fetch(", "confirmDelete", "redirectStatus", "expires_at", "destination_updated_at", "expirationDialog.showModal()"}},
 	} {
 		response := httptest.NewRecorder()
 		router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, asset.path, nil))
@@ -100,6 +103,7 @@ func TestAdminPageAndAssetsSecurityAndAccessibilityContracts(t *testing.T) {
 			for _, contract := range []string{
 				`deleteDialog.returnValue = "cancel"`,
 				"const shortURL = `${location.origin}/${encodeURIComponent(redirect.slug)}`",
+				"`${value.replace(\" \", \"T\")}Z`",
 				"catch (error) {\n    setNotice(error.message);\n    return;\n  }\n  redirects = [];",
 			} {
 				if !strings.Contains(response.Body.String(), contract) {
@@ -128,6 +132,16 @@ func TestAdminPreservesLegacyAdminRedirect(t *testing.T) {
 	router.ServeHTTP(console, httptest.NewRequest(http.MethodGet, "/admin/", nil))
 	if console.Code != http.StatusOK || !strings.Contains(console.Body.String(), `id="login-form"`) {
 		t.Fatalf("fallback console status/body = %d/%q", console.Code, console.Body.String())
+	}
+
+	past := "2000-01-01T00:00:00Z"
+	if _, err := database.SetRedirectExpiration("admin", &past); err != nil {
+		t.Fatal(err)
+	}
+	expired := httptest.NewRecorder()
+	router.ServeHTTP(expired, httptest.NewRequest(http.MethodGet, "/admin", nil))
+	if expired.Code != http.StatusNotFound {
+		t.Fatalf("expired legacy /admin status = %d, want 404", expired.Code)
 	}
 }
 

@@ -55,7 +55,7 @@ if "$root/scripts/check-sqlite-backup" "$invalid_v2_db" >/dev/null 2>&1; then
 	exit 1
 fi
 
-sqlite3 "$invalid_current_db" "CREATE TABLE redirects (id INTEGER, slug TEXT NOT NULL, url TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL); PRAGMA user_version = 1;"
+sqlite3 "$invalid_current_db" "CREATE TABLE redirects (id INTEGER, slug TEXT NOT NULL, url TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, disabled_at TEXT, expires_at TEXT, destination_updated_at TEXT NOT NULL); PRAGMA user_version = 3;"
 if "$root/scripts/check-sqlite-backup" "$invalid_current_db" >/dev/null 2>&1; then
 	printf 'current-version backup without declared constraints passed validation\n' >&2
 	exit 1

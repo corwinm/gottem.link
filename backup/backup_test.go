@@ -20,6 +20,17 @@ func TestDecodePreservesLegacyValuesExactly(t *testing.T) {
 	}
 }
 
+func TestDecodePreservesVersionTwoLifecycleFields(t *testing.T) {
+	input := `{"version":2,"redirects":[{"slug":"timed","url":"https://example.com","disabled":false,"expires_at":"2030-01-02T03:04:05Z","destination_updated_at":"2029-01-02T03:04:05Z"},{"slug":"forever","url":"https://example.org","disabled":true,"expires_at":null,"destination_updated_at":"2028-01-02T03:04:05Z"}]}`
+	envelope, err := backup.Decode(strings.NewReader(input))
+	if err != nil {
+		t.Fatalf("decode v2 export: %v", err)
+	}
+	if envelope.Version != 2 || len(envelope.Redirects) != 2 || envelope.Redirects[0].ExpiresAt == nil || *envelope.Redirects[0].ExpiresAt != "2030-01-02T03:04:05Z" || envelope.Redirects[0].DestinationUpdatedAt != "2029-01-02T03:04:05Z" || envelope.Redirects[1].ExpiresAt != nil {
+		t.Fatalf("envelope = %#v", envelope)
+	}
+}
+
 func TestDecodeRejectsNonCanonicalJSON(t *testing.T) {
 	tests := map[string]string{
 		"unknown envelope field": `{"version":1,"redirects":[],"extra":true}`,
@@ -33,7 +44,7 @@ func TestDecodeRejectsNonCanonicalJSON(t *testing.T) {
 		"null redirects":         `{"version":1,"redirects":null}`,
 		"missing disabled":       `{"version":1,"redirects":[{"slug":"one","url":"https://example.com"}]}`,
 		"trailing JSON":          `{"version":1,"redirects":[]} {}`,
-		"unsupported version":    `{"version":2,"redirects":[]}`,
+		"unsupported version":    `{"version":3,"redirects":[]}`,
 	}
 	for name, input := range tests {
 		t.Run(name, func(t *testing.T) {

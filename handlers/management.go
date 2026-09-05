@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"time"
 	"unicode/utf8"
 
 	"corwinm/gottem.link/backup"
@@ -17,12 +18,17 @@ const maxManagementBodyBytes = 1 << 20
 const maxGeneratedSlugAttempts = 5
 
 type createRedirectRequest struct {
-	Slug *string `json:"slug"`
-	URL  string  `json:"url"`
+	Slug      *string `json:"slug"`
+	URL       string  `json:"url"`
+	ExpiresAt *string `json:"expires_at"`
 }
 
 type updateRedirectRequest struct {
 	URL string `json:"url"`
+}
+
+type expirationRequest struct {
+	ExpiresAt json.RawMessage `json:"expires_at"`
 }
 
 func ManagementCollectionHandler(database *db.DbWrapper, generateSlug SlugGenerator) http.Handler {
@@ -46,11 +52,16 @@ func ManagementCollectionHandler(database *db.DbWrapper, generateSlug SlugGenera
 				writeManagementFieldError(w, http.StatusBadRequest, "invalid URL", "url")
 				return
 			}
-			if request.Slug != nil {
-				createCustomRedirect(w, database, *request.Slug, destination)
+			expiresAt, err := validateExpiration(request.ExpiresAt)
+			if err != nil {
+				writeManagementFieldError(w, http.StatusBadRequest, "invalid expiration", "expires_at")
 				return
 			}
-			createGeneratedRedirect(w, database, generateSlug, destination)
+			if request.Slug != nil {
+				createCustomRedirect(w, database, *request.Slug, destination, expiresAt)
+				return
+			}
+			createGeneratedRedirect(w, database, generateSlug, destination, expiresAt)
 		default:
 			w.Header().Set("Allow", "GET, POST")
 			writeManagementError(w, http.StatusMethodNotAllowed, "method not allowed")
@@ -58,13 +69,13 @@ func ManagementCollectionHandler(database *db.DbWrapper, generateSlug SlugGenera
 	})
 }
 
-func createCustomRedirect(w http.ResponseWriter, database *db.DbWrapper, slug, destination string) {
+func createCustomRedirect(w http.ResponseWriter, database *db.DbWrapper, slug, destination string, expiresAt *string) {
 	canonical, err := validation.ValidateSlug(slug)
 	if err != nil {
 		writeManagementFieldError(w, http.StatusBadRequest, "invalid slug", "slug")
 		return
 	}
-	redirect, err := database.CreateRedirect(canonical, destination)
+	redirect, err := database.CreateRedirectWithExpiration(canonical, destination, expiresAt)
 	switch {
 	case errors.Is(err, db.ErrSlugConflict):
 		writeManagementFieldError(w, http.StatusConflict, "slug already exists", "slug")
@@ -75,7 +86,7 @@ func createCustomRedirect(w http.ResponseWriter, database *db.DbWrapper, slug, d
 	}
 }
 
-func createGeneratedRedirect(w http.ResponseWriter, database *db.DbWrapper, generateSlug SlugGenerator, destination string) {
+func createGeneratedRedirect(w http.ResponseWriter, database *db.DbWrapper, generateSlug SlugGenerator, destination string, expiresAt *string) {
 	for range maxGeneratedSlugAttempts {
 		candidate, err := generateSlug()
 		if err != nil {
@@ -87,7 +98,7 @@ func createGeneratedRedirect(w http.ResponseWriter, database *db.DbWrapper, gene
 			writeManagementError(w, http.StatusInternalServerError, "internal server error")
 			return
 		}
-		redirect, err := database.CreateRedirect(canonical, destination)
+		redirect, err := database.CreateRedirectWithExpiration(canonical, destination, expiresAt)
 		switch {
 		case errors.Is(err, db.ErrSlugConflict):
 			continue
@@ -168,6 +179,69 @@ func ManagementEnableHandler(database *db.DbWrapper) http.Handler {
 	})
 }
 
+func ManagementExpirationHandler(database *db.DbWrapper) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPut {
+			w.Header().Set("Allow", "PUT")
+			writeManagementError(w, http.StatusMethodNotAllowed, "method not allowed")
+			return
+		}
+		var request expirationRequest
+		if err := decodeManagementJSON(w, r, &request); err != nil || request.ExpiresAt == nil {
+			writeManagementError(w, http.StatusBadRequest, "invalid request")
+			return
+		}
+		var value *string
+		if string(request.ExpiresAt) != "null" {
+			var raw string
+			if err := json.Unmarshal(request.ExpiresAt, &raw); err != nil {
+				writeManagementFieldError(w, http.StatusBadRequest, "invalid expiration", "expires_at")
+				return
+			}
+			value = &raw
+		}
+		expiresAt, err := validateExpiration(value)
+		if err != nil {
+			writeManagementFieldError(w, http.StatusBadRequest, "invalid expiration", "expires_at")
+			return
+		}
+		redirect, err := database.SetRedirectExpiration(r.PathValue("slug"), expiresAt)
+		writeRedirectResult(w, redirect, err, http.StatusOK)
+	})
+}
+
+func validateExpiration(value *string) (*string, error) {
+	if value == nil {
+		return nil, nil
+	}
+	parsed, err := time.Parse(time.RFC3339, *value)
+	if err != nil {
+		return nil, err
+	}
+	canonical := parsed.UTC().Format(time.RFC3339)
+	return &canonical, nil
+}
+
+func portableOptionalTimestamp(value *string) (*string, error) {
+	if value == nil {
+		return nil, nil
+	}
+	canonical, err := portableTimestamp(*value)
+	if err != nil {
+		return nil, err
+	}
+	return &canonical, nil
+}
+
+func portableTimestamp(value string) (string, error) {
+	for _, layout := range []string{time.RFC3339, "2006-01-02 15:04:05"} {
+		if parsed, err := time.Parse(layout, value); err == nil {
+			return parsed.UTC().Format(time.RFC3339), nil
+		}
+	}
+	return "", errors.New("invalid timestamp")
+}
+
 func ManagementExportHandler(database *db.DbWrapper) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
@@ -186,7 +260,17 @@ func ManagementExportHandler(database *db.DbWrapper) http.Handler {
 				writeManagementError(w, http.StatusUnprocessableEntity, "export contains invalid UTF-8")
 				return
 			}
-			redirects[index] = backup.Redirect{Slug: value.Slug, URL: value.URL, Disabled: value.DisabledAt != nil}
+			destinationUpdatedAt, err := portableTimestamp(value.DestinationUpdatedAt)
+			if err != nil {
+				writeManagementError(w, http.StatusUnprocessableEntity, "export contains invalid lifecycle timestamp")
+				return
+			}
+			expiresAt, err := portableOptionalTimestamp(value.ExpiresAt)
+			if err != nil {
+				writeManagementError(w, http.StatusUnprocessableEntity, "export contains invalid lifecycle timestamp")
+				return
+			}
+			redirects[index] = backup.Redirect{Slug: value.Slug, URL: value.URL, Disabled: value.DisabledAt != nil, ExpiresAt: expiresAt, DestinationUpdatedAt: destinationUpdatedAt}
 		}
 		payload, err := json.Marshal(backup.Envelope{Version: backup.Version, Redirects: redirects})
 		if err != nil {
@@ -231,7 +315,20 @@ func ManagementImportHandler(database *db.DbWrapper) http.Handler {
 
 		redirects := make([]db.ImportRedirect, len(envelope.Redirects))
 		for index, redirect := range envelope.Redirects {
-			redirects[index] = db.ImportRedirect{Slug: redirect.Slug, URL: redirect.URL, Disabled: redirect.Disabled}
+			expiresAt, err := portableOptionalTimestamp(redirect.ExpiresAt)
+			if err != nil {
+				writeManagementError(w, http.StatusBadRequest, "invalid import")
+				return
+			}
+			destinationUpdatedAt := redirect.DestinationUpdatedAt
+			if destinationUpdatedAt != "" {
+				destinationUpdatedAt, err = portableTimestamp(destinationUpdatedAt)
+				if err != nil {
+					writeManagementError(w, http.StatusBadRequest, "invalid import")
+					return
+				}
+			}
+			redirects[index] = db.ImportRedirect{Slug: redirect.Slug, URL: redirect.URL, Disabled: redirect.Disabled, ExpiresAt: expiresAt, DestinationUpdatedAt: destinationUpdatedAt}
 		}
 		if dryRun {
 			conflicts, err := database.RedirectImportConflicts(redirects)

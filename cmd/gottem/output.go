@@ -11,6 +11,7 @@ import (
 	"os"
 	"strings"
 	"text/tabwriter"
+	"time"
 
 	"corwinm/gottem.link/backup"
 )
@@ -52,7 +53,7 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer, httpClient *h
 	ctx := context.Background()
 	switch command.name {
 	case "create":
-		value, requestErr := client.create(ctx, command.slug, command.destination)
+		value, requestErr := client.create(ctx, command.slug, command.destination, command.expiresAt)
 		if requestErr != nil {
 			err = requestErr
 		} else {
@@ -116,6 +117,17 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer, httpClient *h
 		} else {
 			err = writeDisable(stdout, command.json, value)
 		}
+	case "expire", "unexpire":
+		var expiresAt *string
+		if command.name == "expire" {
+			expiresAt = &command.expiresAt
+		}
+		value, requestErr := client.setExpiration(ctx, command.slug, expiresAt)
+		if requestErr != nil {
+			err = requestErr
+		} else {
+			err = writeExpiration(stdout, command.json, value)
+		}
 	case "delete":
 		if requestErr := client.delete(ctx, command.slug); requestErr != nil {
 			err = requestErr
@@ -161,13 +173,15 @@ func writeDiagnostic(writer io.Writer, err error, token string) {
 }
 
 const usageText = `Usage:
-  gottem [--base-url URL] [--json] create [--slug SLUG] URL
+  gottem [--base-url URL] [--json] create [--slug SLUG] [--expires-at RFC3339] URL
   gottem [--base-url URL] [--json] list
   gottem [--base-url URL] [--json] export
   gottem [--base-url URL] [--json] import [--apply] FILE
   gottem [--base-url URL] [--json] get SLUG
   gottem [--base-url URL] [--json] update SLUG URL
   gottem [--base-url URL] [--json] disable SLUG
+  gottem [--base-url URL] [--json] expire SLUG RFC3339
+  gottem [--base-url URL] [--json] unexpire SLUG
   gottem [--base-url URL] [--json] delete [--force] SLUG
 `
 
@@ -222,8 +236,18 @@ func writeGet(writer io.Writer, jsonOutput bool, value redirect) error {
 	if _, err := fmt.Fprintf(writer, "Slug: %s\nURL: %s\nStatus: %s\nCreated: %s\nUpdated: %s\n", sanitize(value.Slug), sanitize(value.URL), redirectStatus(value), sanitize(value.CreatedAt), sanitize(value.UpdatedAt)); err != nil {
 		return err
 	}
+	if value.DestinationUpdatedAt != "" {
+		if _, err := fmt.Fprintf(writer, "Destination updated: %s\n", sanitize(value.DestinationUpdatedAt)); err != nil {
+			return err
+		}
+	}
 	if value.DisabledAt != nil {
-		_, err := fmt.Fprintf(writer, "Disabled: %s\n", sanitize(*value.DisabledAt))
+		if _, err := fmt.Fprintf(writer, "Disabled: %s\n", sanitize(*value.DisabledAt)); err != nil {
+			return err
+		}
+	}
+	if value.ExpiresAt != nil {
+		_, err := fmt.Fprintf(writer, "Expires: %s\n", sanitize(*value.ExpiresAt))
 		return err
 	}
 	return nil
@@ -245,6 +269,18 @@ func writeDisable(writer io.Writer, jsonOutput bool, value redirect) error {
 	return err
 }
 
+func writeExpiration(writer io.Writer, jsonOutput bool, value redirect) error {
+	if jsonOutput {
+		return writeJSON(writer, value)
+	}
+	if value.ExpiresAt == nil {
+		_, err := fmt.Fprintf(writer, "Cleared expiration for %s\n", sanitize(value.Slug))
+		return err
+	}
+	_, err := fmt.Fprintf(writer, "Expires %s at %s\n", sanitize(value.Slug), sanitize(*value.ExpiresAt))
+	return err
+}
+
 func writeDelete(writer io.Writer, jsonOutput bool, slug string) error {
 	if jsonOutput {
 		return writeJSON(writer, struct {
@@ -263,6 +299,13 @@ func writeJSON(writer io.Writer, value any) error {
 func redirectStatus(value redirect) string {
 	if value.DisabledAt != nil {
 		return "disabled"
+	}
+	if value.ExpiresAt != nil {
+		for _, layout := range []string{time.RFC3339, "2006-01-02 15:04:05"} {
+			if expiresAt, err := time.Parse(layout, *value.ExpiresAt); err == nil && !expiresAt.After(time.Now()) {
+				return "expired"
+			}
+		}
 	}
 	return "active"
 }

@@ -18,12 +18,14 @@ import (
 const maxResponseBodyBytes = 1 << 20
 
 type redirect struct {
-	ID         int64   `json:"id"`
-	Slug       string  `json:"slug"`
-	URL        string  `json:"url"`
-	CreatedAt  string  `json:"created_at"`
-	UpdatedAt  string  `json:"updated_at"`
-	DisabledAt *string `json:"disabled_at"`
+	ID                   int64   `json:"id"`
+	Slug                 string  `json:"slug"`
+	URL                  string  `json:"url"`
+	CreatedAt            string  `json:"created_at"`
+	UpdatedAt            string  `json:"updated_at"`
+	DisabledAt           *string `json:"disabled_at"`
+	ExpiresAt            *string `json:"expires_at"`
+	DestinationUpdatedAt string  `json:"destination_updated_at"`
 }
 
 type apiError struct {
@@ -43,13 +45,17 @@ type managementClient struct {
 	http    *http.Client
 }
 
-func (client managementClient) create(ctx context.Context, slug, destination string) (redirect, error) {
+func (client managementClient) create(ctx context.Context, slug, destination, expiresAt string) (redirect, error) {
 	payload := struct {
-		Slug *string `json:"slug,omitempty"`
-		URL  string  `json:"url"`
+		Slug      *string `json:"slug,omitempty"`
+		URL       string  `json:"url"`
+		ExpiresAt *string `json:"expires_at,omitempty"`
 	}{URL: destination}
 	if slug != "" {
 		payload.Slug = &slug
+	}
+	if expiresAt != "" {
+		payload.ExpiresAt = &expiresAt
 	}
 	var result redirect
 	err := client.requestJSON(ctx, http.MethodPost, collectionURL(client.baseURL), payload, http.StatusCreated, &result)
@@ -91,6 +97,14 @@ func (client managementClient) update(ctx context.Context, slug, destination str
 func (client managementClient) disable(ctx context.Context, slug string) (redirect, error) {
 	var result redirect
 	err := client.requestJSON(ctx, http.MethodPost, disableURL(client.baseURL, slug), nil, http.StatusOK, &result)
+	return result, err
+}
+
+func (client managementClient) setExpiration(ctx context.Context, slug string, expiresAt *string) (redirect, error) {
+	var result redirect
+	err := client.requestJSON(ctx, http.MethodPut, expirationURL(client.baseURL, slug), struct {
+		ExpiresAt *string `json:"expires_at"`
+	}{ExpiresAt: expiresAt}, http.StatusOK, &result)
 	return result, err
 }
 
@@ -222,6 +236,13 @@ func disableURL(base *url.URL, slug string) *url.URL {
 	result := redirectURL(base, slug)
 	result.Path += "/disable"
 	result.RawPath += "/disable"
+	return result
+}
+
+func expirationURL(base *url.URL, slug string) *url.URL {
+	result := redirectURL(base, slug)
+	result.Path += "/expiration"
+	result.RawPath += "/expiration"
 	return result
 }
 

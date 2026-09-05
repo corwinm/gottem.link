@@ -12,15 +12,17 @@ import (
 const defaultBaseURL = "https://gottem.link"
 
 type command struct {
-	name        string
-	slug        string
-	slugSet     bool
-	destination string
-	force       bool
-	apply       bool
-	file        string
-	json        bool
-	baseURL     *url.URL
+	name         string
+	slug         string
+	slugSet      bool
+	destination  string
+	expiresAt    string
+	expiresAtSet bool
+	force        bool
+	apply        bool
+	file         string
+	json         bool
+	baseURL      *url.URL
 }
 
 func parseCommand(args []string) (command, error) {
@@ -64,7 +66,7 @@ func parseCommand(args []string) (command, error) {
 		err = requireArguments(commandArgs, 0, "export takes no arguments")
 	case "import":
 		err = parseImport(&result, commandArgs)
-	case "get", "disable":
+	case "get", "disable", "unexpire":
 		if err = requireArguments(commandArgs, 1, result.name+" requires exactly one slug"); err == nil {
 			result.slug = commandArgs[0]
 			err = requireNonEmpty(result.slug, "slug")
@@ -74,6 +76,13 @@ func parseCommand(args []string) (command, error) {
 			result.slug, result.destination = commandArgs[0], commandArgs[1]
 			if err = requireNonEmpty(result.slug, "slug"); err == nil {
 				err = requireNonEmpty(result.destination, "URL")
+			}
+		}
+	case "expire":
+		if err = requireArguments(commandArgs, 2, "expire requires SLUG and RFC3339 TIMESTAMP"); err == nil {
+			result.slug, result.expiresAt = commandArgs[0], commandArgs[1]
+			if err = requireNonEmpty(result.slug, "slug"); err == nil {
+				err = requireNonEmpty(result.expiresAt, "TIMESTAMP")
 			}
 		}
 	case "delete":
@@ -106,25 +115,39 @@ func parseImport(result *command, args []string) error {
 }
 
 func parseCreate(result *command, args []string) error {
-	if len(args) >= 1 && args[0] == "--slug" {
-		if len(args) < 2 {
-			return errors.New("--slug requires a value")
+	for len(args) > 0 && strings.HasPrefix(args[0], "-") {
+		switch {
+		case args[0] == "--slug", args[0] == "--expires-at":
+			if len(args) < 2 {
+				return fmt.Errorf("%s requires a value", args[0])
+			}
+			if args[0] == "--slug" {
+				result.slug, result.slugSet = args[1], true
+			} else {
+				result.expiresAt, result.expiresAtSet = args[1], true
+			}
+			args = args[2:]
+		case strings.HasPrefix(args[0], "--slug="):
+			result.slug, result.slugSet = strings.TrimPrefix(args[0], "--slug="), true
+			args = args[1:]
+		case strings.HasPrefix(args[0], "--expires-at="):
+			result.expiresAt = strings.TrimPrefix(args[0], "--expires-at=")
+			result.expiresAtSet = true
+			args = args[1:]
+		default:
+			return fmt.Errorf("unknown create flag %q", args[0])
 		}
-		result.slug = args[1]
-		result.slugSet = true
-		args = args[2:]
-	} else if len(args) >= 1 && strings.HasPrefix(args[0], "--slug=") {
-		result.slug = strings.TrimPrefix(args[0], "--slug=")
-		result.slugSet = true
-		args = args[1:]
-	} else if len(args) >= 1 && strings.HasPrefix(args[0], "-") {
-		return fmt.Errorf("unknown create flag %q", args[0])
 	}
 	if err := requireArguments(args, 1, "create requires exactly one URL"); err != nil {
 		return err
 	}
 	if result.slugSet {
 		if err := requireNonEmpty(result.slug, "slug"); err != nil {
+			return err
+		}
+	}
+	if result.expiresAtSet {
+		if err := requireNonEmpty(result.expiresAt, "expiration"); err != nil {
 			return err
 		}
 	}

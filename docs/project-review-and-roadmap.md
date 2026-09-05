@@ -253,13 +253,15 @@ Keep it short and update it as commands become real:
 
 **Delivered:** an embedded, script-free homepage explains the personal shortener and links to `/admin/`, without a public directory or management controls. Exact root routing preserves redirects; the small local stylesheet and page use a five-minute public cache and restrictive security headers. Verified locally on desktop and phone viewports; production rollout is separate.
 
-#### 2.3 Link lifecycle controls
+#### 2.3 Link lifecycle controls — Complete
 
 - Add optional expiration, disable/enable, and destination replacement.
 - Preserve enough audit information to understand when a destination changed.
 - Decide whether expired slugs can ever be reused; default to no reuse.
 
 **Done when:** lifecycle behavior is explicit, tested, and visible in the API/CLI/UI.
+
+**Delivered:** optional RFC3339 expiration is available at creation and through dedicated set/clear controls in the API, CLI, and embedded admin. Expired links return 404 while records and case-insensitively reserved slugs remain. A separate destination-change timestamp is unaffected by disable, enable, and expiration mutations. Schema version 3 preserves existing rows, portable export version 2 preserves the new lifecycle fields, and legacy version 1 imports remain accepted.
 
 #### 2.4 Privacy-conscious usage statistics
 
