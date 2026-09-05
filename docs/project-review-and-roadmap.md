@@ -263,13 +263,15 @@ Keep it short and update it as commands become real:
 
 **Delivered:** optional RFC3339 expiration is available at creation and through dedicated set/clear controls in the API, CLI, and embedded admin. Expired links return 404 while records and case-insensitively reserved slugs remain. A separate destination-change timestamp is unaffected by disable, enable, and expiration mutations. Schema version 3 preserves existing rows, portable export version 2 preserves the new lifecycle fields, and legacy version 1 imports remain accepted.
 
-#### 2.4 Privacy-conscious usage statistics
+#### 2.4 Privacy-conscious usage statistics — Complete
 
 - Start with aggregate click count and last-accessed time.
 - Avoid storing IP addresses, user-agent strings, or referrers unless there is a specific use case and retention policy.
 - Ensure analytics writes do not block redirects.
 
 **Done when:** counts are useful for personal cleanup, documented, and do not collect unnecessary visitor data.
+
+**Delivered:** schema version 4 stores only an aggregate successful redirect count and UTC last-accessed timestamp. A bounded single-writer queue keeps redirect responses independent from analytics storage, drains accepted work on clean shutdown, and deliberately drops events on saturation, storage failure, or process loss. Management API, JSON CLI output, the embedded admin UI, portable export version 3, backward-compatible imports, and SQLite backup validation preserve and expose the aggregates without raw visits or visitor metadata.
 
 ### Milestone 3 — Optional enhancements
 

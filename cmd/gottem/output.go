@@ -241,6 +241,14 @@ func writeGet(writer io.Writer, jsonOutput bool, value redirect) error {
 			return err
 		}
 	}
+	if _, err := fmt.Fprintf(writer, "Clicks: %d\n", value.ClickCount); err != nil {
+		return err
+	}
+	if value.LastAccessedAt != nil {
+		if _, err := fmt.Fprintf(writer, "Last accessed: %s\n", sanitize(*value.LastAccessedAt)); err != nil {
+			return err
+		}
+	}
 	if value.DisabledAt != nil {
 		if _, err := fmt.Fprintf(writer, "Disabled: %s\n", sanitize(*value.DisabledAt)); err != nil {
 			return err

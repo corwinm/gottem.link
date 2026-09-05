@@ -1,12 +1,16 @@
 package routes_test
 
 import (
+	"context"
 	"corwinm/gottem.link/db"
 	"corwinm/gottem.link/routes"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"testing"
+	"time"
 )
 
 func TestRouterRedirectsKnownSlug(t *testing.T) {
@@ -31,6 +35,118 @@ func TestRouterRedirectsKnownSlug(t *testing.T) {
 	if location := recorder.Header().Get("Location"); location != target {
 		t.Errorf("Location = %q, want %q", location, target)
 	}
+}
+
+func TestRouterTracksOnlySuccessfulPublicRedirects(t *testing.T) {
+	database, err := db.GetDB(filepath.Join(t.TempDir(), "gottem.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(database.Close)
+	active, _ := database.CreateRedirect("active", "https://example.com/active")
+	disabled, _ := database.CreateRedirect("disabled", "https://example.com/disabled")
+	_, _ = database.DisableRedirect(disabled.Slug)
+	past := "2000-01-01T00:00:00Z"
+	expired, _ := database.CreateRedirectWithExpiration("expired", "https://example.com/expired", &past)
+	writer := db.NewAccessWriter(database, 16, nil)
+	router := routes.NewRouterWithStats(database, "", writer)
+
+	for _, path := range []string{"/", "/missing", "/disabled", "/expired", "/.well-known/healthz", "/.well-known/readyz", "/admin", "/api/v1/redirects"} {
+		router.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, path, nil))
+	}
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/ACTIVE", nil))
+	if response.Code != http.StatusFound {
+		t.Fatalf("active status = %d", response.Code)
+	}
+	if err := writer.Close(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, expected := range []struct{ id, count int64 }{{active.ID, 1}, {disabled.ID, 0}, {expired.ID, 0}} {
+		var count int64
+		var accessedAt any
+		if err := database.QueryRow(`SELECT click_count, last_accessed_at FROM redirects WHERE id = ?`, expected.id).Scan(&count, &accessedAt); err != nil {
+			t.Fatal(err)
+		}
+		if count != expected.count || (expected.count == 0 && accessedAt != nil) || (expected.count == 1 && accessedAt == nil) {
+			t.Fatalf("id %d stats = %d/%v, want %d", expected.id, count, accessedAt, expected.count)
+		}
+	}
+}
+
+func TestRouterRegistersAuthenticatedInternalAccessWrite(t *testing.T) {
+	database, err := db.GetDB(filepath.Join(t.TempDir(), "gottem.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(database.Close)
+	redirect, err := database.CreateRedirect("active", "https://example.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	router := routes.NewRouterWithAdminStats(database, "shared-token", "", routes.AdminConfig{}, nil, database)
+	request := httptest.NewRequest(http.MethodPost, "/.internal/accesses", strings.NewReader(`{"redirect_id":`+strconv.FormatInt(redirect.ID, 10)+`,"accessed_at":"2026-01-02T03:04:05Z"}`))
+	request.RemoteAddr = "127.0.0.1:1234"
+	request.Header.Set("Authorization", "Bearer shared-token")
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, request)
+	if response.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, body = %q", response.Code, response.Body.String())
+	}
+	stored, err := database.GetRedirect("active")
+	if err != nil || stored.ClickCount != 1 {
+		t.Fatalf("stored = %#v, err = %v", stored, err)
+	}
+}
+
+func TestRouterDisablesTypedNilStatsDependencies(t *testing.T) {
+	database, err := db.GetDB(filepath.Join(t.TempDir(), "gottem.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(database.Close)
+	if _, err := database.CreateRedirect("known", "https://example.com"); err != nil {
+		t.Fatal(err)
+	}
+	var writer *db.AccessWriter
+	var store *db.DbWrapper
+	router := routes.NewRouterWithAdminStats(database, "", "", routes.AdminConfig{}, writer, store)
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/known", nil))
+	if response.Code != http.StatusFound {
+		t.Fatalf("status = %d, want 302", response.Code)
+	}
+}
+
+func TestRedirectResponseDoesNotWaitForStatsStorage(t *testing.T) {
+	database, err := db.GetDB(filepath.Join(t.TempDir(), "gottem.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(database.Close)
+	if _, err := database.CreateRedirect("active", "https://example.com"); err != nil {
+		t.Fatal(err)
+	}
+	store := &slowRouteAccessStore{release: make(chan struct{})}
+	writer := db.NewAccessWriter(store, 1, nil)
+	router := routes.NewRouterWithStats(database, "", writer)
+	started := time.Now()
+	router.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/active", nil))
+	if elapsed := time.Since(started); elapsed > 50*time.Millisecond {
+		t.Fatalf("redirect waited for stats storage: %s", elapsed)
+	}
+	close(store.release)
+	if err := writer.Close(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+}
+
+type slowRouteAccessStore struct{ release chan struct{} }
+
+func (store *slowRouteAccessStore) RecordRedirectAccess(_ context.Context, _ int64, _ time.Time) error {
+	<-store.release
+	return nil
 }
 
 func TestRouterReturnsNotFoundForUnknownSlug(t *testing.T) {

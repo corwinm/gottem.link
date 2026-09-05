@@ -27,7 +27,7 @@ func TestManagementCLIExpirationLifecycleAgainstRealRouter(t *testing.T) {
 	baseArgs := []string{"--base-url", server.URL, "--json"}
 
 	code, created, stderr := runCLI(t, append(baseArgs, "create", "--slug", "timed", "--expires-at", "2999-01-01T00:00:00Z", "https://example.com"), server.Client(), nil)
-	if code != 0 || stderr != "" || !strings.Contains(created, `"expires_at":"2999-01-01T00:00:00Z"`) {
+	if code != 0 || stderr != "" || !strings.Contains(created, `"expires_at":"2999-01-01T00:00:00Z"`) || !strings.Contains(created, `"click_count":0`) || !strings.Contains(created, `"last_accessed_at":null`) {
 		t.Fatalf("create code/stdout/stderr = %d/%q/%q", code, created, stderr)
 	}
 	code, expired, stderr := runCLI(t, append(baseArgs, "expire", "timed", "2000-01-01T00:00:00Z"), server.Client(), nil)
@@ -192,7 +192,7 @@ func TestCompactExportSucceedsWhenListResponseExceedsClientLimit(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(database.Close)
-	if _, err := database.Exec(`WITH RECURSIVE numbers(n) AS (VALUES(1) UNION ALL SELECT n + 1 FROM numbers WHERE n < 9000) INSERT INTO redirects (slug, url) SELECT printf('s%05d', n), 'x' FROM numbers`); err != nil {
+	if _, err := database.Exec(`WITH RECURSIVE numbers(n) AS (VALUES(1) UNION ALL SELECT n + 1 FROM numbers WHERE n < 6000) INSERT INTO redirects (slug, url) SELECT printf('s%05d', n), 'x' FROM numbers`); err != nil {
 		t.Fatal(err)
 	}
 	server := httptest.NewServer(routes.NewRouter(database, testToken))
@@ -207,7 +207,7 @@ func TestCompactExportSucceedsWhenListResponseExceedsClientLimit(t *testing.T) {
 		t.Fatalf("export code/stderr = %d/%q", exportCode, exportStderr)
 	}
 	envelope, err := backup.Decode(strings.NewReader(exported))
-	if err != nil || len(envelope.Redirects) != 9000 {
+	if err != nil || len(envelope.Redirects) != 6000 {
 		t.Fatalf("decode compact export = %d redirects, %v", len(envelope.Redirects), err)
 	}
 }

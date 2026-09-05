@@ -12,6 +12,8 @@ invalid_db="$tmp/invalid.db"
 invalid_null_db="$tmp/invalid-null.db"
 invalid_duplicate_db="$tmp/invalid-duplicate.db"
 invalid_current_db="$tmp/invalid-current.db"
+invalid_reusable_ids_db="$tmp/invalid-reusable-ids.db"
+invalid_comment_autoincrement_db="$tmp/invalid-comment-autoincrement.db"
 invalid_v2_db="$tmp/invalid-v2.db"
 legacy_db="$tmp/legacy.db"
 version_one_db="$tmp/version-one.db"
@@ -55,9 +57,21 @@ if "$root/scripts/check-sqlite-backup" "$invalid_v2_db" >/dev/null 2>&1; then
 	exit 1
 fi
 
-sqlite3 "$invalid_current_db" "CREATE TABLE redirects (id INTEGER, slug TEXT NOT NULL, url TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, disabled_at TEXT, expires_at TEXT, destination_updated_at TEXT NOT NULL); PRAGMA user_version = 3;"
+sqlite3 "$invalid_current_db" "CREATE TABLE redirects (id INTEGER PRIMARY KEY, slug TEXT NOT NULL COLLATE NOCASE UNIQUE, url TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, disabled_at TEXT, expires_at TEXT, destination_updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, click_count TEXT NOT NULL DEFAULT 0, last_accessed_at TEXT); PRAGMA user_version = 4;"
 if "$root/scripts/check-sqlite-backup" "$invalid_current_db" >/dev/null 2>&1; then
 	printf 'current-version backup without declared constraints passed validation\n' >&2
+	exit 1
+fi
+
+sqlite3 "$invalid_reusable_ids_db" "CREATE TABLE redirects (id INTEGER PRIMARY KEY, slug TEXT NOT NULL COLLATE NOCASE UNIQUE, url TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, disabled_at TEXT, expires_at TEXT, destination_updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, click_count INTEGER NOT NULL DEFAULT 0 CHECK (click_count >= 0), last_accessed_at TEXT); PRAGMA user_version = 4;"
+if "$root/scripts/check-sqlite-backup" "$invalid_reusable_ids_db" >/dev/null 2>&1; then
+	printf 'current-version backup without AUTOINCREMENT passed validation\n' >&2
+	exit 1
+fi
+
+sqlite3 "$invalid_comment_autoincrement_db" "CREATE TABLE redirects (id INTEGER PRIMARY KEY /* AUTOINCREMENT */, slug TEXT NOT NULL COLLATE NOCASE UNIQUE, url TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, disabled_at TEXT, expires_at TEXT, destination_updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, click_count INTEGER NOT NULL DEFAULT 0 CHECK (click_count >= 0), last_accessed_at TEXT); PRAGMA user_version = 4;"
+if "$root/scripts/check-sqlite-backup" "$invalid_comment_autoincrement_db" >/dev/null 2>&1; then
+	printf 'current-version backup with comment-only AUTOINCREMENT passed validation\n' >&2
 	exit 1
 fi
 

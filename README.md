@@ -20,11 +20,11 @@ The local server listens on `:8080` and stores data in `./gottem.db`. Override e
 go run . -addr :3000 -dsn /path/to/gottem.db
 ```
 
-Set `GOTTEM_MANAGEMENT_TOKEN` to enable the private JSON management API. `GOTTEM_BACKUP_TOKEN` may separately grant read-only access to the export endpoint; it cannot access redirect management, imports, or browser sessions. Without either token, `/api/` returns 404. Creating a redirect accepts an optional `slug` and RFC3339 `expires_at`; omitted or `null` slugs are generated automatically, while custom slugs are validated and stored in lowercase. Expired and disabled links return 404 publicly but remain inspectable, and their slugs remain reserved. `destination_updated_at` records only the latest destination replacement; `updated_at` continues to record any lifecycle mutation.
+Set `GOTTEM_MANAGEMENT_TOKEN` to enable the private JSON management API. `GOTTEM_BACKUP_TOKEN` may separately grant read-only access to the export endpoint; it cannot access redirect management, imports, or browser sessions. Without either token, `/api/` returns 404. Creating a redirect accepts an optional `slug` and RFC3339 `expires_at`; omitted or `null` slugs are generated automatically, while custom slugs are validated and stored in lowercase. Expired and disabled links return 404 publicly but remain inspectable, and their slugs remain reserved. `destination_updated_at` records only the latest destination replacement; `updated_at` continues to record any lifecycle mutation. Management records also expose aggregate `click_count` and UTC `last_accessed_at`. Only successful active, unexpired public resolutions are counted; no visit events, IP addresses, user agents, referrers, or other visitor metadata are stored. Aggregate tracking is disabled unless both the management token and the internal `-stats-proxy-url` are configured; the production LiteFS command supplies its loopback proxy origin.
 
 ### Admin web UI
 
-The optional dependency-free admin console is served at `/admin`. It uses the existing JSON management API and includes create, search, copy, edit, expiration, disable/enable, and confirmed delete flows. Active, disabled, and expired states are shown separately. Configure it with the management token plus two additional values:
+The optional dependency-free admin console is served at `/admin`. It uses the existing JSON management API and includes create, search, copy, edit, expiration, disable/enable, and confirmed delete flows. Active, disabled, and expired states are shown separately, with quiet aggregate click and last-accessed details. Configure it with the management token plus two additional values:
 
 ```sh
 export GOTTEM_MANAGEMENT_TOKEN='...'
@@ -67,7 +67,7 @@ gottem export
 gottem import [--apply] FILE
 ```
 
-Pass `--json` before CRUD commands for machine-readable output. Export writes the versioned portable JSON format; import accepts that format from a file or from standard input with `-`, dry-runs by default, and writes only with `--apply`. Delete prompts for confirmation unless `--force` is supplied.
+Pass `--json` before CRUD commands for machine-readable output, including usage statistics. Export writes portable format version 3, preserving lifecycle and aggregate usage fields; import remains compatible with versions 1 and 2, dry-runs by default, and writes only with `--apply`. Delete prompts for confirmation unless `--force` is supplied.
 
 ## Checks
 
@@ -75,7 +75,7 @@ Pass `--json` before CRUD commands for machine-readable output. Export writes th
 
 ## Deployment
 
-Merges to `main` deploy `gottem-link` through the `Fly Deploy` GitHub environment. Fly runs two machines in `sjc`; each has a LiteFS volume, and LiteFS proxies public traffic to the Go server. On candidate startup, LiteFS promotes the node, runs `run-app -migrate-only`, and only then starts the non-writing server mode on every node.
+Merges to `main` deploy `gottem-link` through the `Fly Deploy` GitHub environment. Fly runs two machines in `sjc`; each has a LiteFS volume, and LiteFS proxies public traffic to the Go server. On candidate startup, LiteFS promotes the node, runs `run-app -migrate-only`, and only then starts the server on every node. Redirect GETs remain local; aggregate increments use authenticated internal POSTs through the loopback LiteFS proxy so replicas forward those writes to the primary.
 
 - `make container-test` builds the production image and exercises its LiteFS entrypoint under Docker.
 - `/.well-known/healthz` reports process health; `/.well-known/readyz` verifies database readiness.

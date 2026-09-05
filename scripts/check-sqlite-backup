@@ -72,6 +72,21 @@ case "$version" in
 			exit 1
 		fi
 		;;
+	4)
+		columns=$(sqlite3 -readonly "$backup" "SELECT count(*) FROM pragma_table_info('redirects') WHERE name IN ('id', 'slug', 'url', 'created_at', 'updated_at', 'disabled_at', 'expires_at', 'destination_updated_at', 'click_count', 'last_accessed_at');")
+		required=$(sqlite3 -readonly "$backup" "SELECT count(*) FROM pragma_table_info('redirects') WHERE name IN ('slug', 'url', 'created_at', 'updated_at', 'destination_updated_at', 'click_count') AND \"notnull\" = 1;")
+		primary_key=$(sqlite3 -readonly "$backup" "SELECT count(*) FROM pragma_table_info('redirects') WHERE name = 'id' AND pk = 1;")
+		autoincrement_pk=$(sqlite3 -readonly "$backup" "SELECT count(*) FROM sqlite_schema WHERE type = 'table' AND name = 'redirects' AND replace(replace(replace(replace(replace(upper(sql), char(9), ' '), char(10), ' '), char(13), ' '), '  ', ' '), '  ', ' ') LIKE '%ID INTEGER PRIMARY KEY AUTOINCREMENT%';")
+		timestamp_defaults=$(sqlite3 -readonly "$backup" "SELECT count(*) FROM pragma_table_info('redirects') WHERE name IN ('created_at', 'updated_at', 'destination_updated_at') AND dflt_value = 'CURRENT_TIMESTAMP';")
+		unique_nocase_slug=$(sqlite3 -readonly "$backup" "SELECT count(*) FROM pragma_index_list('redirects') indexes JOIN pragma_index_xinfo(indexes.name) columns WHERE indexes.\"unique\" = 1 AND columns.name = 'slug' AND columns.coll = 'NOCASE' AND columns.key = 1;")
+		nullable=$(sqlite3 -readonly "$backup" "SELECT count(*) FROM pragma_table_info('redirects') WHERE name IN ('disabled_at', 'expires_at', 'last_accessed_at') AND \"notnull\" = 0 AND dflt_value IS NULL;")
+		click_contract=$(sqlite3 -readonly "$backup" "SELECT count(*) FROM pragma_table_info('redirects') WHERE name = 'click_count' AND type = 'INTEGER' AND \"notnull\" = 1 AND dflt_value = '0';")
+		invalid_rows=$(sqlite3 -readonly "$backup" "SELECT count(*) FROM redirects WHERE slug IS NULL OR url IS NULL OR created_at IS NULL OR updated_at IS NULL OR destination_updated_at IS NULL OR click_count IS NULL OR click_count < 0;")
+		if [ "$columns" != "10" ] || [ "$required" != "6" ] || [ "$primary_key" != "1" ] || [ "$autoincrement_pk" != "1" ] || [ "$timestamp_defaults" != "3" ] || [ "$unique_nocase_slug" != "1" ] || [ "$nullable" != "3" ] || [ "$click_contract" != "1" ] || [ "$invalid_rows" != "0" ]; then
+			printf 'backup validation failed\n' >&2
+			exit 1
+		fi
+		;;
 	*)
 		printf 'unsupported schema version: %s\n' "$version" >&2
 		exit 1

@@ -23,8 +23,8 @@ func TestMigrateCreatesCurrentSchema(t *testing.T) {
 	if err := database.QueryRow("PRAGMA user_version").Scan(&version); err != nil {
 		t.Fatalf("query schema version: %v", err)
 	}
-	if version != 3 {
-		t.Fatalf("schema version = %d, want 3", version)
+	if version != 4 {
+		t.Fatalf("schema version = %d, want 4", version)
 	}
 
 	columns := map[string]struct {
@@ -76,6 +76,12 @@ func TestMigrateCreatesCurrentSchema(t *testing.T) {
 		t.Error("missing redirects.expires_at")
 	} else if columns["expires_at"].notNull != 0 || columns["expires_at"].defaultValue.Valid {
 		t.Errorf("redirects.expires_at = %#v, want nullable without default", columns["expires_at"])
+	}
+	if column, ok := columns["click_count"]; !ok || column.notNull != 1 || !column.defaultValue.Valid || column.defaultValue.String != "0" {
+		t.Errorf("redirects.click_count = %#v, present %v; want NOT NULL DEFAULT 0", column, ok)
+	}
+	if column, ok := columns["last_accessed_at"]; !ok || column.notNull != 0 || column.defaultValue.Valid {
+		t.Errorf("redirects.last_accessed_at = %#v, present %v; want nullable without default", column, ok)
 	}
 }
 
@@ -218,8 +224,8 @@ func TestMigrateUpgradesVersionOneWithoutChangingRedirects(t *testing.T) {
 	if err := after.QueryRow(`SELECT id, disabled_at FROM redirects WHERE slug = 'known'`).Scan(&id, &disabledAt); err != nil {
 		t.Fatalf("query migrated redirect: %v", err)
 	}
-	if version != 3 || id != 42 || disabledAt.Valid {
-		t.Fatalf("version/id/disabled_at = %d/%d/%v, want 3/42/null", version, id, disabledAt)
+	if version != 4 || id != 42 || disabledAt.Valid {
+		t.Fatalf("version/id/disabled_at = %d/%d/%v, want 4/42/null", version, id, disabledAt)
 	}
 }
 
@@ -256,15 +262,50 @@ func TestMigrateUpgradesVersionTwoPreservingLifecycleData(t *testing.T) {
 	if err := after.QueryRow(`SELECT id, created_at, updated_at, disabled_at, expires_at, destination_updated_at FROM redirects WHERE slug = 'known'`).Scan(&id, &createdAt, &updatedAt, &disabledAt, &expiresAt, &destinationUpdatedAt); err != nil {
 		t.Fatal(err)
 	}
-	if version != 3 || id != 42 || createdAt != "2026-01-01 00:00:00" || updatedAt != "2026-02-01 00:00:00" || disabledAt != "2026-03-01 00:00:00" || expiresAt.Valid || destinationUpdatedAt != updatedAt {
+	if version != 4 || id != 42 || createdAt != "2026-01-01 00:00:00" || updatedAt != "2026-02-01 00:00:00" || disabledAt != "2026-03-01 00:00:00" || expiresAt.Valid || destinationUpdatedAt != updatedAt {
 		t.Fatalf("migrated v2 row = version=%d id=%d created=%q updated=%q disabled=%q expires=%v destination_updated=%q", version, id, createdAt, updatedAt, disabledAt, expiresAt, destinationUpdatedAt)
+	}
+}
+
+func TestMigrateUpgradesVersionThreePreservingLifecycleData(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "gottem.db")
+	database := openSQLite(t, path)
+	mustExec(t, database, `CREATE TABLE redirects (
+		id INTEGER PRIMARY KEY, slug TEXT NOT NULL COLLATE NOCASE UNIQUE, url TEXT NOT NULL,
+		created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+		disabled_at TEXT, expires_at TEXT, destination_updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+	)`)
+	mustExec(t, database, `INSERT INTO redirects (id, slug, url, created_at, updated_at, disabled_at, expires_at, destination_updated_at)
+		VALUES (42, 'known', 'https://example.com', '2026-01-01 00:00:00', '2026-02-01 00:00:00', '2026-03-01 00:00:00', '2030-01-01T00:00:00Z', '2026-01-15 00:00:00')`)
+	mustExec(t, database, `PRAGMA user_version = 3`)
+	if err := database.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := db.Migrate(path); err != nil {
+		t.Fatalf("migrate version-three database: %v", err)
+	}
+	after := openSQLite(t, path)
+	t.Cleanup(func() { _ = after.Close() })
+	var version, id int
+	var createdAt, updatedAt, disabledAt, expiresAt, destinationUpdatedAt string
+	var clickCount int64
+	var lastAccessedAt sql.NullString
+	if err := after.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil {
+		t.Fatal(err)
+	}
+	if err := after.QueryRow(`SELECT id, created_at, updated_at, disabled_at, expires_at, destination_updated_at, click_count, last_accessed_at FROM redirects WHERE slug = 'known'`).Scan(&id, &createdAt, &updatedAt, &disabledAt, &expiresAt, &destinationUpdatedAt, &clickCount, &lastAccessedAt); err != nil {
+		t.Fatal(err)
+	}
+	if version != 4 || id != 42 || createdAt != "2026-01-01 00:00:00" || updatedAt != "2026-02-01 00:00:00" || disabledAt != "2026-03-01 00:00:00" || expiresAt != "2030-01-01T00:00:00Z" || destinationUpdatedAt != "2026-01-15 00:00:00" || clickCount != 0 || lastAccessedAt.Valid {
+		t.Fatalf("migrated v3 row = version=%d id=%d lifecycle=%q/%q/%q/%q/%q stats=%d/%v", version, id, createdAt, updatedAt, disabledAt, expiresAt, destinationUpdatedAt, clickCount, lastAccessedAt)
 	}
 }
 
 func TestMigrateRejectsNewerSchemaVersion(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "gottem.db")
 	database := openSQLite(t, path)
-	mustExec(t, database, `PRAGMA user_version = 4`)
+	mustExec(t, database, `PRAGMA user_version = 5`)
 	if err := database.Close(); err != nil {
 		t.Fatalf("close newer database: %v", err)
 	}

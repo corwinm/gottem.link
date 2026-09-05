@@ -7,9 +7,18 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"time"
 )
 
-func RedirectHandler(database *db.DbWrapper) http.HandlerFunc {
+type AccessTracker interface {
+	Track(id int64, at time.Time) bool
+}
+
+func RedirectHandler(database *db.DbWrapper, trackers ...AccessTracker) http.HandlerFunc {
+	var tracker AccessTracker
+	if len(trackers) > 0 {
+		tracker = trackers[0]
+	}
 	return func(w http.ResponseWriter, r *http.Request) {
 		rawSlug := r.URL.Path[1:]
 		if rawSlug == "" {
@@ -18,7 +27,7 @@ func RedirectHandler(database *db.DbWrapper) http.HandlerFunc {
 		}
 		slug := strings.ToLower(rawSlug)
 
-		url, err := database.QuerySlug(slug)
+		id, url, err := database.ResolveSlug(slug)
 		if errors.Is(err, sql.ErrNoRows) {
 			http.Error(w, "Slug not found", http.StatusNotFound)
 			return
@@ -30,5 +39,8 @@ func RedirectHandler(database *db.DbWrapper) http.HandlerFunc {
 		}
 
 		http.Redirect(w, r, url, http.StatusFound)
+		if tracker != nil {
+			tracker.Track(id, time.Now().UTC())
+		}
 	}
 }

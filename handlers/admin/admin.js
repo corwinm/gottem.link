@@ -157,6 +157,16 @@ function renderRedirects() {
     expirationDetail.hidden = redirect.expires_at === null;
     if (redirect.expires_at !== null) expirationDetail.textContent = formatTimestamp(redirect.expires_at);
     card.querySelector(".destination-updated").textContent = formatTimestamp(redirect.destination_updated_at);
+    const count = redirect.click_count;
+    const usage = Number.isSafeInteger(count) && count >= 0
+      ? `${count} ${count === 1 ? "click" : "clicks"}`
+      : Number.isFinite(count) && count >= 0
+        ? `approximately ${count.toLocaleString()} clicks`
+        : "0 clicks";
+    card.querySelector(".usage-count").textContent = usage;
+    const lastAccessed = card.querySelector(".last-accessed");
+    lastAccessed.hidden = redirect.last_accessed_at === null;
+    if (redirect.last_accessed_at !== null) lastAccessed.textContent = `Last ${formatTimestamp(redirect.last_accessed_at)}`;
 
     card.querySelector(".copy").addEventListener("click", async () => {
       try {

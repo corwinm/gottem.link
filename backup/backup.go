@@ -11,9 +11,10 @@ import (
 )
 
 const (
-	LegacyVersion = 1
-	Version       = 2
-	MaxBytes      = 1 << 20
+	LegacyVersion    = 1
+	LifecycleVersion = 2
+	Version          = 3
+	MaxBytes         = 1 << 20
 )
 
 var ErrTooLarge = errors.New("import exceeds 1 MiB")
@@ -29,6 +30,8 @@ type Redirect struct {
 	Disabled             bool    `json:"disabled"`
 	ExpiresAt            *string `json:"expires_at"`
 	DestinationUpdatedAt string  `json:"destination_updated_at"`
+	ClickCount           int64   `json:"click_count"`
+	LastAccessedAt       *string `json:"last_accessed_at"`
 }
 
 func (envelope Envelope) MarshalJSON() ([]byte, error) {
@@ -47,8 +50,25 @@ func (envelope Envelope) MarshalJSON() ([]byte, error) {
 			Redirects []legacyRedirect `json:"redirects"`
 		}{Version: envelope.Version, Redirects: redirects})
 	}
-	type versionTwoEnvelope Envelope
-	return json.Marshal(versionTwoEnvelope(envelope))
+	if envelope.Version == LifecycleVersion {
+		type lifecycleRedirect struct {
+			Slug                 string  `json:"slug"`
+			URL                  string  `json:"url"`
+			Disabled             bool    `json:"disabled"`
+			ExpiresAt            *string `json:"expires_at"`
+			DestinationUpdatedAt string  `json:"destination_updated_at"`
+		}
+		redirects := make([]lifecycleRedirect, len(envelope.Redirects))
+		for index, redirect := range envelope.Redirects {
+			redirects[index] = lifecycleRedirect{Slug: redirect.Slug, URL: redirect.URL, Disabled: redirect.Disabled, ExpiresAt: redirect.ExpiresAt, DestinationUpdatedAt: redirect.DestinationUpdatedAt}
+		}
+		return json.Marshal(struct {
+			Version   int                 `json:"version"`
+			Redirects []lifecycleRedirect `json:"redirects"`
+		}{Version: envelope.Version, Redirects: redirects})
+	}
+	type currentEnvelope Envelope
+	return json.Marshal(currentEnvelope(envelope))
 }
 
 type versionEnvelope struct {
@@ -77,6 +97,21 @@ type wireRedirectV2 struct {
 	Disabled             *bool           `json:"disabled"`
 	ExpiresAt            json.RawMessage `json:"expires_at"`
 	DestinationUpdatedAt *string         `json:"destination_updated_at"`
+}
+
+type wireEnvelopeV3 struct {
+	Version   int               `json:"version"`
+	Redirects *[]wireRedirectV3 `json:"redirects"`
+}
+
+type wireRedirectV3 struct {
+	Slug                 string          `json:"slug"`
+	URL                  string          `json:"url"`
+	Disabled             *bool           `json:"disabled"`
+	ExpiresAt            json.RawMessage `json:"expires_at"`
+	DestinationUpdatedAt *string         `json:"destination_updated_at"`
+	ClickCount           *int64          `json:"click_count"`
+	LastAccessedAt       json.RawMessage `json:"last_accessed_at"`
 }
 
 type Issue struct {
@@ -130,7 +165,7 @@ func Decode(reader io.Reader) (Envelope, error) {
 			return Envelope{}, err
 		}
 		return envelope, nil
-	case Version:
+	case LifecycleVersion:
 		var wire wireEnvelopeV2
 		if err := decodeStrict(data, &wire); err != nil || wire.Redirects == nil {
 			return Envelope{}, errors.New("invalid import JSON")
@@ -149,6 +184,37 @@ func Decode(reader io.Reader) (Envelope, error) {
 				expiresAt = &raw
 			}
 			envelope.Redirects[index] = Redirect{Slug: redirect.Slug, URL: redirect.URL, Disabled: *redirect.Disabled, ExpiresAt: expiresAt, DestinationUpdatedAt: *redirect.DestinationUpdatedAt}
+		}
+		if err := validate(&envelope); err != nil {
+			return Envelope{}, err
+		}
+		return envelope, nil
+	case Version:
+		var wire wireEnvelopeV3
+		if err := decodeStrict(data, &wire); err != nil || wire.Redirects == nil {
+			return Envelope{}, errors.New("invalid import JSON")
+		}
+		envelope := Envelope{Version: wire.Version, Redirects: make([]Redirect, len(*wire.Redirects))}
+		for index, redirect := range *wire.Redirects {
+			if redirect.Disabled == nil || redirect.ExpiresAt == nil || redirect.DestinationUpdatedAt == nil || redirect.ClickCount == nil || redirect.LastAccessedAt == nil {
+				return Envelope{}, errors.New("invalid import JSON")
+			}
+			var expiresAt, lastAccessedAt *string
+			if string(redirect.ExpiresAt) != "null" {
+				var raw string
+				if err := json.Unmarshal(redirect.ExpiresAt, &raw); err != nil {
+					return Envelope{}, errors.New("invalid import JSON")
+				}
+				expiresAt = &raw
+			}
+			if string(redirect.LastAccessedAt) != "null" {
+				var raw string
+				if err := json.Unmarshal(redirect.LastAccessedAt, &raw); err != nil {
+					return Envelope{}, errors.New("invalid import JSON")
+				}
+				lastAccessedAt = &raw
+			}
+			envelope.Redirects[index] = Redirect{Slug: redirect.Slug, URL: redirect.URL, Disabled: *redirect.Disabled, ExpiresAt: expiresAt, DestinationUpdatedAt: *redirect.DestinationUpdatedAt, ClickCount: *redirect.ClickCount, LastAccessedAt: lastAccessedAt}
 		}
 		if err := validate(&envelope); err != nil {
 			return Envelope{}, err
@@ -238,7 +304,7 @@ func validate(envelope *Envelope) error {
 		if redirect.URL == "" {
 			issues = append(issues, Issue{Index: index, Field: "url", Message: "empty URL"})
 		}
-		if envelope.Version == Version {
+		if envelope.Version >= LifecycleVersion {
 			if redirect.ExpiresAt != nil {
 				if _, err := time.Parse(time.RFC3339, *redirect.ExpiresAt); err != nil {
 					issues = append(issues, Issue{Index: index, Field: "expires_at", Message: "invalid timestamp"})
@@ -246,6 +312,19 @@ func validate(envelope *Envelope) error {
 			}
 			if _, err := time.Parse(time.RFC3339, redirect.DestinationUpdatedAt); err != nil {
 				issues = append(issues, Issue{Index: index, Field: "destination_updated_at", Message: "invalid timestamp"})
+			}
+		}
+		if envelope.Version == Version {
+			if redirect.ClickCount < 0 {
+				issues = append(issues, Issue{Index: index, Field: "click_count", Message: "must not be negative"})
+			}
+			if (redirect.ClickCount == 0) != (redirect.LastAccessedAt == nil) {
+				issues = append(issues, Issue{Index: index, Field: "last_accessed_at", Message: "must be present exactly when click_count is nonzero"})
+			}
+			if redirect.LastAccessedAt != nil {
+				if _, err := time.Parse(time.RFC3339, *redirect.LastAccessedAt); err != nil {
+					issues = append(issues, Issue{Index: index, Field: "last_accessed_at", Message: "invalid timestamp"})
+				}
 			}
 		}
 	}

@@ -33,7 +33,7 @@ proxy:
 exec:
   - cmd: "run-app -migrate-only -dsn /litefs/gottem.db"
     if-candidate: true
-  - cmd: "run-app -addr :8081 -dsn /litefs/gottem.db"
+  - cmd: "run-app -addr :8081 -dsn /litefs/gottem.db -stats-proxy-url http://127.0.0.1:8080"
 
 # The lease section specifies how the cluster will be managed. We're using the
 # "consul" lease type so that our application can dynamically change the primary.

@@ -19,6 +19,7 @@ type config struct {
 	sessionSecret   string
 	adminOrigin     string
 	secureCookies   bool
+	statsProxyURL   string
 }
 
 func parseConfig(args []string) (config, error) {
@@ -32,6 +33,7 @@ func parseConfig(args []string) (config, error) {
 	config.adminOrigin = os.Getenv("GOTTEM_ADMIN_ORIGIN")
 	flags.StringVar(&config.addr, "addr", ":8080", "http service address")
 	flags.StringVar(&config.dsn, "dsn", "gottem.db", "database file")
+	flags.StringVar(&config.statsProxyURL, "stats-proxy-url", "", "local LiteFS proxy origin for aggregate access writes")
 	flags.BoolVar(&config.migrateOnly, "migrate-only", false, "migrate the database and exit")
 
 	if err := flags.Parse(args); err != nil {

@@ -141,7 +141,7 @@ func TestExportRejectsInvalidSuccessPayloads(t *testing.T) {
 		"missing fields":       `{}`,
 		"missing disabled":     `{"version":1,"redirects":[{"slug":"one","url":"https://example.com"}]}`,
 		"unknown field":        `{"version":1,"redirects":[],"extra":true}`,
-		"unsupported version":  `{"version":3,"redirects":[]}`,
+		"unsupported version":  `{"version":4,"redirects":[]}`,
 		"duplicate object key": `{"version":1,"redirects":[],"redirects":[]}`,
 	}
 	for name, response := range tests {
@@ -657,7 +657,7 @@ func TestHumanReadableOutputSanitizesFields(t *testing.T) {
 		{name: "list", lines: 2, write: func(writer io.Writer) error {
 			return writeList(writer, false, []redirect{value})
 		}},
-		{name: "get", lines: 6, write: func(writer io.Writer) error {
+		{name: "get", lines: 7, write: func(writer io.Writer) error {
 			return writeGet(writer, false, value)
 		}},
 		{name: "update", lines: 1, write: func(writer io.Writer) error {
