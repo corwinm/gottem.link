@@ -242,7 +242,7 @@ Keep it short and update it as commands become real:
 
 **Delivered:** the embedded dependency-free console uses short-lived signed browser sessions, exact-origin protection for cookie-authenticated writes, and the existing JSON API. Bearer authentication remains available for the CLI, automation, and backup export; HTMX remains future-only.
 
-#### 2.2 Minimal public homepage
+#### 2.2 Minimal public homepage — Complete
 
 - Replace the placeholder root response with a small, branded explanation of gottem.link.
 - Include a clear admin sign-in link without exposing link creation or management publicly.
@@ -250,6 +250,8 @@ Keep it short and update it as commands become real:
 - Avoid marketing sections, account features, analytics scripts, or a frontend framework.
 
 **Done when:** `https://gottem.link/` is useful to a first-time visitor, links to the private admin console, and remains fast and accessible on phone and desktop.
+
+**Delivered:** an embedded, script-free homepage explains the personal shortener and links to `/admin/`, without a public directory or management controls. Exact root routing preserves redirects; the small local stylesheet and page use a five-minute public cache and restrictive security headers. Verified locally on desktop and phone viewports; production rollout is separate.
 
 #### 2.3 Link lifecycle controls
 
@@ -294,6 +296,6 @@ Avoid accounts, teams, billing, distributed caches, event pipelines, or multi-re
 10. **Complete:** Add the JSON-capable management CLI.
 11. **Complete:** Add dry-run import/export and restore verification.
 12. **Complete:** Add a minimal private admin UI.
-13. Add a minimal public homepage.
+13. **Complete:** Add a minimal public homepage.
 
 The first three issues may be grouped into one recovery PR only if the tests remain focused and the diff stays small. Later issues should generally be separate PRs.
