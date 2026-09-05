@@ -26,6 +26,8 @@ type redirect struct {
 	DisabledAt           *string `json:"disabled_at"`
 	ExpiresAt            *string `json:"expires_at"`
 	DestinationUpdatedAt string  `json:"destination_updated_at"`
+	ClickCount           int64   `json:"click_count"`
+	LastAccessedAt       *string `json:"last_accessed_at"`
 }
 
 type apiError struct {

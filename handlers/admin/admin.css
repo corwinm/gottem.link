@@ -76,6 +76,9 @@ input::placeholder { color: #7c786e; }
 .lifecycle-details span::before { color: var(--signal); }
 .expiration-detail::before { content: "EXP "; }
 .destination-updated::before { content: "DEST "; }
+.usage-details { display: flex; flex-wrap: wrap; gap: 6px 18px; margin-top: 5px; color: var(--muted); font: .68rem / 1.45 "Courier New", monospace; }
+.usage-count::before { content: "USE "; color: var(--signal); }
+.last-accessed::before { content: "· "; color: var(--signal); }
 .actions { display: flex; flex-wrap: wrap; gap: 6px; justify-content: end; max-width: 380px; }
 .actions .button { min-height: 44px; padding-inline: 10px; }
 

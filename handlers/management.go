@@ -270,7 +270,12 @@ func ManagementExportHandler(database *db.DbWrapper) http.Handler {
 				writeManagementError(w, http.StatusUnprocessableEntity, "export contains invalid lifecycle timestamp")
 				return
 			}
-			redirects[index] = backup.Redirect{Slug: value.Slug, URL: value.URL, Disabled: value.DisabledAt != nil, ExpiresAt: expiresAt, DestinationUpdatedAt: destinationUpdatedAt}
+			lastAccessedAt, err := portableOptionalTimestamp(value.LastAccessedAt)
+			if err != nil {
+				writeManagementError(w, http.StatusUnprocessableEntity, "export contains invalid usage timestamp")
+				return
+			}
+			redirects[index] = backup.Redirect{Slug: value.Slug, URL: value.URL, Disabled: value.DisabledAt != nil, ExpiresAt: expiresAt, DestinationUpdatedAt: destinationUpdatedAt, ClickCount: value.ClickCount, LastAccessedAt: lastAccessedAt}
 		}
 		payload, err := json.Marshal(backup.Envelope{Version: backup.Version, Redirects: redirects})
 		if err != nil {
@@ -328,7 +333,12 @@ func ManagementImportHandler(database *db.DbWrapper) http.Handler {
 					return
 				}
 			}
-			redirects[index] = db.ImportRedirect{Slug: redirect.Slug, URL: redirect.URL, Disabled: redirect.Disabled, ExpiresAt: expiresAt, DestinationUpdatedAt: destinationUpdatedAt}
+			lastAccessedAt, err := portableOptionalTimestamp(redirect.LastAccessedAt)
+			if err != nil {
+				writeManagementError(w, http.StatusBadRequest, "invalid import")
+				return
+			}
+			redirects[index] = db.ImportRedirect{Slug: redirect.Slug, URL: redirect.URL, Disabled: redirect.Disabled, ExpiresAt: expiresAt, DestinationUpdatedAt: destinationUpdatedAt, ClickCount: redirect.ClickCount, LastAccessedAt: lastAccessedAt}
 		}
 		if dryRun {
 			conflicts, err := database.RedirectImportConflicts(redirects)

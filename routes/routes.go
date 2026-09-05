@@ -20,12 +20,29 @@ func NewRouter(database *db.DbWrapper, managementToken string) *http.ServeMux {
 	return newRouter(database, managementToken, handlers.GenerateSlug)
 }
 
+func NewRouterWithStats(database *db.DbWrapper, managementToken string, tracker handlers.AccessTracker) *http.ServeMux {
+	return newRouterWithAdmin(database, managementToken, "", AdminConfig{}, handlers.GenerateSlug, tracker)
+}
+
 func NewRouterWithBackupToken(database *db.DbWrapper, managementToken, backupToken string) *http.ServeMux {
 	return newRouterWithBackupToken(database, managementToken, backupToken, handlers.GenerateSlug)
 }
 
 func NewRouterWithAdmin(database *db.DbWrapper, managementToken, backupToken string, admin AdminConfig) *http.ServeMux {
 	return newRouterWithAdmin(database, managementToken, backupToken, admin, handlers.GenerateSlug)
+}
+
+func NewRouterWithAdminStats(database *db.DbWrapper, managementToken, backupToken string, admin AdminConfig, tracker *db.AccessWriter, accessStore *db.DbWrapper) *http.ServeMux {
+	var router *http.ServeMux
+	if tracker == nil {
+		router = newRouterWithAdmin(database, managementToken, backupToken, admin, handlers.GenerateSlug)
+	} else {
+		router = newRouterWithAdmin(database, managementToken, backupToken, admin, handlers.GenerateSlug, tracker)
+	}
+	if managementToken != "" && accessStore != nil {
+		router.Handle("/.internal/accesses", handlers.InternalAccessHandler(accessStore, managementToken))
+	}
+	return router
 }
 
 func newRouter(database *db.DbWrapper, managementToken string, generateSlug handlers.SlugGenerator) *http.ServeMux {
@@ -36,7 +53,7 @@ func newRouterWithBackupToken(database *db.DbWrapper, managementToken, backupTok
 	return newRouterWithAdmin(database, managementToken, backupToken, AdminConfig{}, generateSlug)
 }
 
-func newRouterWithAdmin(database *db.DbWrapper, managementToken, backupToken string, admin AdminConfig, generateSlug handlers.SlugGenerator) *http.ServeMux {
+func newRouterWithAdmin(database *db.DbWrapper, managementToken, backupToken string, admin AdminConfig, generateSlug handlers.SlugGenerator, trackers ...handlers.AccessTracker) *http.ServeMux {
 	router := http.NewServeMux()
 	router.HandleFunc("/.well-known/healthz", handlers.HealthHandler)
 	router.HandleFunc("/.well-known/readyz", handlers.ReadinessHandler(database))
@@ -69,7 +86,7 @@ func newRouterWithAdmin(database *db.DbWrapper, managementToken, backupToken str
 		router.Handle("/api/v1/redirects/{slug}/enable", managementAuth(handlers.ManagementEnableHandler(database)))
 		router.Handle("/api/v1/redirects/{slug}/expiration", managementAuth(handlers.ManagementExpirationHandler(database)))
 	}
-	router.HandleFunc("/{slug}", handlers.RedirectHandler(database))
+	router.HandleFunc("/{slug}", handlers.RedirectHandler(database, trackers...))
 	router.HandleFunc("/{$}", handlers.HomeHandler)
 	router.HandleFunc("/.well-known/home.css", handlers.HomeHandler)
 	return router

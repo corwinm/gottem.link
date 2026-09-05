@@ -281,12 +281,12 @@ func TestPortableExportPreservesLifecycleFieldsAndImportsV1(t *testing.T) {
 	if _, err := database.CreateRedirectWithExpiration("timed", "https://example.com/timed", &future); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := database.Exec(`UPDATE redirects SET destination_updated_at = '2029-01-02T03:04:05.987654321Z' WHERE slug = 'timed'`); err != nil {
+	if _, err := database.Exec(`UPDATE redirects SET destination_updated_at = '2029-01-02T03:04:05.987654321Z', click_count = 12, last_accessed_at = '2029-02-03T04:05:06.123456789Z' WHERE slug = 'timed'`); err != nil {
 		t.Fatal(err)
 	}
 	router := routes.NewRouter(database, testManagementToken)
 	exported := managementRequest(t, router, http.MethodGet, "/api/v1/exports", "", testManagementToken)
-	want := `{"version":2,"redirects":[{"slug":"timed","url":"https://example.com/timed","disabled":false,"expires_at":"2999-01-01T00:00:00.123456789Z","destination_updated_at":"2029-01-02T03:04:05.987654321Z"}]}` + "\n"
+	want := `{"version":3,"redirects":[{"slug":"timed","url":"https://example.com/timed","disabled":false,"expires_at":"2999-01-01T00:00:00.123456789Z","destination_updated_at":"2029-01-02T03:04:05.987654321Z","click_count":12,"last_accessed_at":"2029-02-03T04:05:06.123456789Z"}]}` + "\n"
 	if exported.Code != http.StatusOK || exported.Body.String() != want {
 		t.Fatalf("export status/body = %d/%q, want 200/%q", exported.Code, exported.Body.String(), want)
 	}
@@ -307,7 +307,7 @@ func TestPortableExportPreservesLifecycleFieldsAndImportsV1(t *testing.T) {
 		}
 	}
 	timed, err := destination.GetRedirect("timed")
-	if err != nil || timed.ExpiresAt == nil || *timed.ExpiresAt != future || timed.DestinationUpdatedAt != "2029-01-02T03:04:05.987654321Z" {
+	if err != nil || timed.ExpiresAt == nil || *timed.ExpiresAt != future || timed.DestinationUpdatedAt != "2029-01-02T03:04:05.987654321Z" || timed.ClickCount != 12 || timed.LastAccessedAt == nil || *timed.LastAccessedAt != "2029-02-03T04:05:06.123456789Z" {
 		t.Fatalf("imported timed redirect = %#v, %v", timed, err)
 	}
 	legacy, err := destination.GetRedirect("legacy")
@@ -483,7 +483,7 @@ func TestBulkImportRejectsInvalidEnvelopesWithoutWrites(t *testing.T) {
 	tests := map[string]string{
 		"unknown field":       `{"version":1,"redirects":[],"extra":true}`,
 		"trailing JSON":       `{"version":1,"redirects":[]} {}`,
-		"unsupported version": `{"version":3,"redirects":[]}`,
+		"unsupported version": `{"version":4,"redirects":[]}`,
 		"duplicate and fields": `{"version":1,"redirects":[` +
 			`{"slug":"","url":"` + secret + `","disabled":false},` +
 			`{"slug":"DUP","url":"","disabled":false},` +

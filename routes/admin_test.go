@@ -64,7 +64,7 @@ func TestAdminPageAndAssetsSecurityAndAccessibilityContracts(t *testing.T) {
 		`<main`, `id="login-form"`, `type="password"`, `autocomplete="current-password"`,
 		`brand-wordmark`, `gottem<span>.link</span>`, `id="create-form"`, `id="create-expiration"`, `type="datetime-local"`,
 		`id="search"`, `role="status"`, `aria-live="polite"`, `<template id="redirect-template"`,
-		`class="expiration-detail"`, `class="destination-updated"`, `class="button quiet expiration"`,
+		`class="expiration-detail"`, `class="destination-updated"`, `class="usage-count"`, `class="last-accessed"`, `aria-label="Usage statistics"`, `class="button quiet expiration"`,
 		`id="expiration-dialog"`, `id="expiration-form"`, `id="expiration-value"`, `step="0.001"`, `id="expiration-error"`, `role="alert"`, `id="clear-expiration"`,
 		`id="delete-dialog"`, `<script src="/admin/assets/admin.js" defer></script>`,
 		`<link rel="stylesheet" href="/admin/assets/admin.css">`,
@@ -83,7 +83,7 @@ func TestAdminPageAndAssetsSecurityAndAccessibilityContracts(t *testing.T) {
 		contains    []string
 	}{
 		{path: "/admin/assets/admin.css", contentType: "text/css; charset=utf-8", contains: []string{"--paper: #eeeae1", "--ink: #26251f", "--accent: #e3b94e", "--signal: #765400", "Arial Black", "Georgia", "Courier New", ".button.header-button", "min-height: 44px", ":focus-visible", ".status.expired", "@media (max-width:", "prefers-reduced-motion"}},
-		{path: "/admin/assets/admin.js", contentType: "text/javascript; charset=utf-8", contains: []string{"textContent", "navigator.clipboard", "fetch(", "confirmDelete", "redirectStatus", "expires_at", "destination_updated_at", "expirationDialog.showModal()"}},
+		{path: "/admin/assets/admin.js", contentType: "text/javascript; charset=utf-8", contains: []string{"textContent", "navigator.clipboard", "fetch(", "confirmDelete", "redirectStatus", "expires_at", "destination_updated_at", "click_count", "last_accessed_at", "expirationDialog.showModal()"}},
 	} {
 		response := httptest.NewRecorder()
 		router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, asset.path, nil))

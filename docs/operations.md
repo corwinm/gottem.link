@@ -32,11 +32,13 @@ Destinations must use `http` or `https` and be no more than 2048 bytes. URLs wit
 
 Responses are JSON except successful deletion, which returns 204. Validation failures return 400 JSON with a field-specific `field` value; slug conflicts return 409; missing redirects return 404. Keep the production token only in Fly secrets and a secure local credential store.
 
+Successful active, unexpired public resolutions enqueue an aggregate increment after the 302 response is committed. The single writer sends authenticated internal POSTs to the loopback LiteFS proxy, which forwards replica writes to the primary. The receiving route is available only to loopback requests bearing `GOTTEM_MANAGEMENT_TOKEN`; if either that token or `-stats-proxy-url` is absent, tracking is disabled rather than writing a replica-local database. The primary uses a separate single-connection SQLite handle with no busy retries for these best-effort updates. Redirects never wait for stats storage: events are dropped when the 256-entry queue is saturated, after shutdown starts, on a storage error, or when the shared 10-second server shutdown deadline expires. This deliberate best-effort loss favors redirect availability; failures are logged without visitor metadata.
+
 ## Schema migrations
 
 `run-app -migrate-only -dsn PATH` is the only production schema-writing mode. LiteFS runs it only on candidate nodes after mount and synchronization; `lease.promote: true` makes that candidate the writer before the command runs. Normal server startup uses `db.Open`, which does not connect, create tables, or migrate.
 
-Schema version 1 introduced case-insensitively unique, non-null slugs; non-null destinations; and creation/update timestamps. Version 2 adds the nullable disable timestamp used by management operations. Version 3 adds nullable expiration and the non-null destination-change timestamp, backfilled from each row's existing update timestamp. Migration from the legacy version-0 table is transactional, preserves IDs and destinations, and fails without changing the original database when legacy rows violate the new constraints. Versions newer than the binary supports are rejected.
+Schema version 1 introduced case-insensitively unique, non-null slugs; non-null destinations; and creation/update timestamps. Version 2 adds the nullable disable timestamp used by management operations. Version 3 adds nullable expiration and the non-null destination-change timestamp, backfilled from each row's existing update timestamp. Version 4 adds a non-negative aggregate click count and nullable last-accessed timestamp, and makes preserved IDs non-reusable so delayed writes cannot be attributed to a replacement row. Migration from the legacy version-0 table is transactional, preserves IDs and lifecycle data, and fails without changing the original database when rows violate the new constraints. Versions newer than the binary supports are rejected.
 
 Before merging a schema change, export and validate a production backup, run `make container-test`, and confirm that live machine/volume regions still match `primary_region`. After deployment, verify schema version, row count, readiness, and known redirects.
 
@@ -45,17 +47,17 @@ Before merging a schema change, export and validate a production backup, run `ma
 `gottem export` writes a versioned logical backup that can rebuild redirect behavior without database access:
 
 ```json
-{"version":1,"redirects":[{"slug":"name","url":"https://example.com","disabled":false}]}
+{"version":3,"redirects":[{"slug":"name","url":"https://example.com","disabled":false,"expires_at":null,"destination_updated_at":"2026-09-04T12:00:00Z","click_count":0,"last_accessed_at":null}]}
 ```
 
-The format intentionally excludes database IDs and timestamps. Treat exports as sensitive because they contain private destination URLs, and store them encrypted outside the repository.
+The format intentionally excludes database IDs and per-visit data. Version 3 preserves lifecycle timestamps plus aggregate usage statistics; versions 1 and 2 remain importable. Treat exports as sensitive because they contain private destination URLs, and store them encrypted outside the repository.
 
 Validate the entire file and report slug conflicts without writing before applying an import:
 
 ```sh
-gottem export > redirects-v1.json
-gottem import redirects-v1.json
-gottem import --apply redirects-v1.json
+gottem export > redirects-v3.json
+gottem import redirects-v3.json
+gottem import --apply redirects-v3.json
 ```
 
 Use `-` instead of a filename to read from standard input. Import is transactional and rejects unsupported versions, unknown or duplicate JSON fields, missing required fields, empty slugs or destinations, duplicate slugs under SQLite's ASCII-only `NOCASE` rules, and existing slug conflicts. As a restore format, it otherwise preserves valid UTF-8 legacy slug and destination values exactly, along with whether each redirect is active or disabled. Export fails explicitly rather than corrupting a legacy row that contains invalid UTF-8.
@@ -97,7 +99,7 @@ Fly takes daily volume snapshots and currently retains them for five days. Befor
    scripts/check-sqlite-backup ./gottem-backup.db
    ```
 
-4. Store the backup outside the repository. The validator accepts schema versions 0, 1, and 2 while rejecting incompatible rows, unknown versions, or missing required constraints. Remove the remote temporary file after confirming the stored copy.
+4. Store the backup outside the repository. The validator accepts schema versions 0 through 4 while rejecting incompatible rows, unknown versions, or missing required constraints. Remove the remote temporary file after confirming the stored copy.
 
 ## Restore
 

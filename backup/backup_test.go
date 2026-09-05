@@ -31,6 +31,35 @@ func TestDecodePreservesVersionTwoLifecycleFields(t *testing.T) {
 	}
 }
 
+func TestDecodePreservesVersionThreeUsageFields(t *testing.T) {
+	input := `{"version":3,"redirects":[{"slug":"used","url":"https://example.com","disabled":false,"expires_at":null,"destination_updated_at":"2029-01-02T03:04:05Z","click_count":12,"last_accessed_at":"2029-02-03T04:05:06.123456789Z"},{"slug":"new","url":"https://example.org","disabled":false,"expires_at":null,"destination_updated_at":"2029-01-02T03:04:05Z","click_count":0,"last_accessed_at":null}]}`
+	envelope, err := backup.Decode(strings.NewReader(input))
+	if err != nil {
+		t.Fatalf("decode v3 export: %v", err)
+	}
+	if envelope.Version != 3 || envelope.Redirects[0].ClickCount != 12 || envelope.Redirects[0].LastAccessedAt == nil || *envelope.Redirects[0].LastAccessedAt != "2029-02-03T04:05:06.123456789Z" || envelope.Redirects[1].LastAccessedAt != nil {
+		t.Fatalf("envelope = %#v", envelope)
+	}
+}
+
+func TestDecodeRejectsInconsistentUsageAggregates(t *testing.T) {
+	for name, input := range map[string]string{
+		"nonzero count without timestamp": `{"version":3,"redirects":[{"slug":"used","url":"https://example.com","disabled":false,"expires_at":null,"destination_updated_at":"2029-01-02T03:04:05Z","click_count":1,"last_accessed_at":null}]}`,
+		"timestamp without count":         `{"version":3,"redirects":[{"slug":"unused","url":"https://example.com","disabled":false,"expires_at":null,"destination_updated_at":"2029-01-02T03:04:05Z","click_count":0,"last_accessed_at":"2029-02-03T04:05:06Z"}]}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, err := backup.Decode(strings.NewReader(input))
+			var validationErr *backup.ValidationError
+			if !errors.As(err, &validationErr) {
+				t.Fatalf("error = %v, want ValidationError", err)
+			}
+			if len(validationErr.Issues) != 1 || validationErr.Issues[0].Field != "last_accessed_at" {
+				t.Fatalf("issues = %#v", validationErr.Issues)
+			}
+		})
+	}
+}
+
 func TestDecodeRejectsNonCanonicalJSON(t *testing.T) {
 	tests := map[string]string{
 		"unknown envelope field": `{"version":1,"redirects":[],"extra":true}`,
@@ -44,7 +73,7 @@ func TestDecodeRejectsNonCanonicalJSON(t *testing.T) {
 		"null redirects":         `{"version":1,"redirects":null}`,
 		"missing disabled":       `{"version":1,"redirects":[{"slug":"one","url":"https://example.com"}]}`,
 		"trailing JSON":          `{"version":1,"redirects":[]} {}`,
-		"unsupported version":    `{"version":3,"redirects":[]}`,
+		"unsupported version":    `{"version":4,"redirects":[]}`,
 	}
 	for name, input := range tests {
 		t.Run(name, func(t *testing.T) {

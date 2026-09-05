@@ -1,11 +1,13 @@
 package db
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/mattn/go-sqlite3"
 )
@@ -24,6 +26,8 @@ type Redirect struct {
 	DisabledAt           *string `json:"disabled_at"`
 	ExpiresAt            *string `json:"expires_at"`
 	DestinationUpdatedAt string  `json:"destination_updated_at"`
+	ClickCount           int64   `json:"click_count"`
+	LastAccessedAt       *string `json:"last_accessed_at"`
 }
 
 type ImportRedirect struct {
@@ -32,6 +36,8 @@ type ImportRedirect struct {
 	Disabled             bool
 	ExpiresAt            *string
 	DestinationUpdatedAt string
+	ClickCount           int64
+	LastAccessedAt       *string
 }
 
 type SlugConflictsError struct {
@@ -42,7 +48,7 @@ func (err *SlugConflictsError) Error() string {
 	return "slug conflicts: " + strings.Join(err.Slugs, ", ")
 }
 
-const redirectColumns = "id, slug, url, created_at, updated_at, disabled_at, expires_at, destination_updated_at"
+const redirectColumns = "id, slug, url, created_at, updated_at, disabled_at, expires_at, destination_updated_at, click_count, last_accessed_at"
 
 func (db *DbWrapper) CreateRedirect(slug, url string) (Redirect, error) {
 	return db.CreateRedirectWithExpiration(slug, url, nil)
@@ -109,9 +115,9 @@ func (db *DbWrapper) ImportRedirects(redirects []ImportRedirect) error {
 
 	for _, redirect := range redirects {
 		_, err := tx.Exec(`
-			INSERT INTO redirects (slug, url, disabled_at, expires_at, destination_updated_at)
-			VALUES (?, ?, CASE WHEN ? THEN CURRENT_TIMESTAMP ELSE NULL END, ?, COALESCE(NULLIF(?, ''), CURRENT_TIMESTAMP))
-		`, redirect.Slug, redirect.URL, redirect.Disabled, redirect.ExpiresAt, redirect.DestinationUpdatedAt)
+			INSERT INTO redirects (slug, url, disabled_at, expires_at, destination_updated_at, click_count, last_accessed_at)
+			VALUES (?, ?, CASE WHEN ? THEN CURRENT_TIMESTAMP ELSE NULL END, ?, COALESCE(NULLIF(?, ''), CURRENT_TIMESTAMP), ?, ?)
+		`, redirect.Slug, redirect.URL, redirect.Disabled, redirect.ExpiresAt, redirect.DestinationUpdatedAt, redirect.ClickCount, redirect.LastAccessedAt)
 		if isUniqueConstraint(err) {
 			return &SlugConflictsError{Slugs: []string{sqliteNOCASEName(redirect.Slug)}}
 		}
@@ -227,6 +233,25 @@ func (db *DbWrapper) InsertRedirect(slug, url string) error {
 	return err
 }
 
+func (db *DbWrapper) RecordRedirectAccess(ctx context.Context, id int64, accessedAt time.Time) error {
+	value := accessedAt.UTC().Format(time.RFC3339Nano)
+	result, err := db.db.ExecContext(ctx, `UPDATE redirects
+		SET click_count = CASE WHEN click_count < 9223372036854775807 THEN click_count + 1 ELSE click_count END,
+			last_accessed_at = CASE WHEN last_accessed_at IS NOT NULL AND julianday(last_accessed_at) > julianday(?) THEN last_accessed_at ELSE ? END
+		WHERE id = ?`, value, value, id)
+	if err != nil {
+		return fmt.Errorf("record redirect access: %w", err)
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("record redirect access result: %w", err)
+	}
+	if rows == 0 {
+		return ErrRedirectNotFound
+	}
+	return nil
+}
+
 func (db *DbWrapper) DeleteRedirect(slug string) error {
 	result, err := db.Exec("DELETE FROM redirects WHERE slug = ?", slug)
 	if err != nil {
@@ -248,7 +273,7 @@ type redirectScanner interface {
 
 func scanRedirect(scanner redirectScanner) (Redirect, error) {
 	var redirect Redirect
-	var disabledAt, expiresAt sql.NullString
+	var disabledAt, expiresAt, lastAccessedAt sql.NullString
 	if err := scanner.Scan(
 		&redirect.ID,
 		&redirect.Slug,
@@ -258,6 +283,8 @@ func scanRedirect(scanner redirectScanner) (Redirect, error) {
 		&disabledAt,
 		&expiresAt,
 		&redirect.DestinationUpdatedAt,
+		&redirect.ClickCount,
+		&lastAccessedAt,
 	); err != nil {
 		return Redirect{}, err
 	}
@@ -266,6 +293,9 @@ func scanRedirect(scanner redirectScanner) (Redirect, error) {
 	}
 	if expiresAt.Valid {
 		redirect.ExpiresAt = &expiresAt.String
+	}
+	if lastAccessedAt.Valid {
+		redirect.LastAccessedAt = &lastAccessedAt.String
 	}
 	return redirect, nil
 }
