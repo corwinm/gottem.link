@@ -17,7 +17,7 @@ Updated against the milestone 1.2 implementation at `96bf96c` on 2026-09-03.
 - **Complete:** Go 1.27 is aligned across local, CI, Docker, and Fly builds; `govulncheck` is clean.
 - **Complete:** configuration is parsed once, the configured database is injected into the router, and redirect behavior is covered for found, missing, and database-error cases.
 - **Complete:** found slugs return HTTP 302 with `Location`; missing slugs return 404; operational database failures return 500.
-- **Complete:** schema version 2 is applied transactionally by an explicit candidate-only LiteFS migration command; serving remains non-writing, legacy rows are preserved, and incompatible or newer schemas fail closed.
+- **Complete:** schema version 3 is applied transactionally by an explicit candidate-only LiteFS migration command; serving remains non-writing, legacy rows are preserved, and incompatible or newer schemas fail closed.
 - **Complete:** PR #10 corrected Fly's primary region from `sea` to `sjc`, matching both deployed machines and volumes. This restored LiteFS primary election and public HTTP availability.
 - **Complete:** the root `AGENTS.md`, README, Makefile, and CI now define one local and remote quality contract.
 - **Complete:** deployment topology, container behavior, health/readiness, graceful shutdown, and backup/restore verification are documented and tested.
