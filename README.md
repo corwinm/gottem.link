@@ -2,6 +2,8 @@
 
 A small personal URL shortener written in Go with SQLite.
 
+The public homepage at `/` explains the service and links to the private console at `/admin/`. It does not expose public link creation or a link directory. The dependency-free page is embedded in the Go binary and leaves existing redirect routes unchanged.
+
 ## Development
 
 Requires Go 1.27, a C compiler for `go-sqlite3`, `sqlite3`, and `make`.
