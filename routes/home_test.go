@@ -18,12 +18,12 @@ func TestPublicHomepage(t *testing.T) {
 		t.Errorf("homepage status/content-type = %d/%q, want 200/text/html; charset=utf-8", response.Code, response.Header().Get("Content-Type"))
 	}
 	markup := response.Body.String()
-	for _, required := range []string{`<html lang="en">`, `<meta name="viewport" content="width=device-width, initial-scale=1">`, `<title>gottem.link`, `<main`, `<h1>gottem.link</h1>`, `A personal URL shortener.`, `Open a full gottem.link URL to go straight to its destination.`, `href="/admin/"`, `Admin sign in`, `<link rel="stylesheet" href="/.well-known/home.css">`} {
+	for _, required := range []string{`<html lang="en">`, `<meta name="viewport" content="width=device-width, initial-scale=1">`, `<title>gottem.link`, `<main`, `<h1>gottem<span>.link</span></h1>`, `A personal`, `URL shortener.`, `Open the complete address you were sent`, `Short link you received`, `gottem<span>.link</span>/example`, `opens`, `Original website`, `example.com/article`, `Links are not listed publicly.`, `href="/admin/"`, `>Admin</a>`, `<link rel="stylesheet" href="/.well-known/home.css">`} {
 		if !strings.Contains(markup, required) {
 			t.Errorf("homepage missing %q", required)
 		}
 	}
-	for _, forbidden := range []string{"Hello, World!", "<script", "<form", "<input", "<style", "https://", "http://", "/api/"} {
+	for _, forbidden := range []string{"Hello, World!", "Short links. Straight there.", "Admin sign in", "<script", "<form", "<input", "<style", "https://", "http://", "/api/"} {
 		if strings.Contains(markup, forbidden) {
 			t.Errorf("homepage contains %q", forbidden)
 		}
@@ -110,7 +110,7 @@ func TestPublicHomepageDoesNotShadowOtherRoutes(t *testing.T) {
 			if response.Code != test.status || response.Header().Get("Location") != test.location {
 				t.Errorf("status/location = %d/%q, want %d/%q", response.Code, response.Header().Get("Location"), test.status, test.location)
 			}
-			if strings.Contains(response.Body.String(), "A personal URL shortener.") {
+			if strings.Contains(response.Body.String(), "Open the complete address you were sent") {
 				t.Error("non-root route served homepage")
 			}
 		})

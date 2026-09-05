@@ -3,20 +3,41 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="gottem.link is a personal URL shortener. Follow a shared link to its destination, or sign in to the private admin console.">
-  <title>gottem.link — A personal URL shortener</title>
+  <meta name="description" content="Open the complete shared address to reach its destination. Links are not listed publicly.">
+  <title>gottem.link — Personal URL shortener</title>
   <link rel="stylesheet" href="/.well-known/home.css">
 </head>
 <body>
-  <main>
-    <p class="eyebrow">Short links. Straight there.</p>
-    <h1>gottem.link</h1>
-    <p class="intro">A personal URL shortener.</p>
-    <p class="explanation">Open a full gottem.link URL to go straight to its destination. This page is just the starting point, not a link directory.</p>
-    <div class="admin">
-      <a href="/admin/">Admin sign in <span aria-hidden="true">→</span></a>
-      <p>Link management is private.</p>
+  <header>
+    <div class="wrap">
+      <h1>gottem<span>.link</span></h1>
     </div>
+  </header>
+  <main class="wrap">
+    <div class="intro">
+      <p class="description">A personal<br>URL shortener.</p>
+      <p class="instructions">Open the complete address you were sent, including the part after the slash, to reach its destination.</p>
+    </div>
+    <figure class="handoff">
+      <figcaption>An example of how a short link works</figcaption>
+      <div class="ticket">
+        <div class="short">
+          <span class="step-number" aria-hidden="true">01</span>
+          <span class="label">Short link you received</span>
+          <code>gottem<span>.link</span>/example</code>
+          <p class="connector">opens <span aria-hidden="true">→</span></p>
+        </div>
+        <div class="original">
+          <span class="step-number" aria-hidden="true">02</span>
+          <span class="label">Original website</span>
+          <code>example.com/article</code>
+        </div>
+      </div>
+    </figure>
+    <p class="directory">Links are not listed publicly.</p>
   </main>
+  <footer class="wrap">
+    <a href="/admin/">Admin</a>
+  </footer>
 </body>
 </html>
