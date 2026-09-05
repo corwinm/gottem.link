@@ -24,7 +24,7 @@ Set `GOTTEM_MANAGEMENT_TOKEN` to enable the private JSON management API. `GOTTEM
 
 ### Admin web UI
 
-The optional dependency-free admin console is served at `/admin`. It uses the existing JSON management API and includes create, search, copy, edit, expiration, disable/enable, and confirmed delete flows. Active, disabled, and expired states are shown separately, with quiet aggregate click and last-accessed details. Configure it with the management token plus two additional values:
+The optional dependency-free admin console is served at `/admin`. It uses the existing JSON management API and includes create, search, copy, QR preview/download, edit, expiration, disable/enable, and confirmed delete flows. Active, disabled, and expired states are shown separately, with quiet aggregate click and last-accessed details. Configure it with the management token plus two additional values:
 
 ```sh
 export GOTTEM_MANAGEMENT_TOKEN='...'
@@ -40,6 +40,8 @@ export GOTTEM_ADMIN_ORIGIN='http://127.0.0.1:8080'
 ```
 
 Login verifies `GOTTEM_MANAGEMENT_TOKEN` once and stores a signed 8-hour `HttpOnly`, `SameSite=Strict` cookie—not the token. Cookies are `Secure` on HTTPS; local loopback HTTP is the only exception. Session signatures are bound to the current management-token fingerprint, so rotating that token invalidates existing sessions. Cookie-authenticated writes and login/logout require an exact `Origin` match. Existing bearer-authenticated API and CLI requests remain compatible and do not require an `Origin` header. The UI and session routes remain unavailable unless the complete configuration is valid.
+
+When the admin UI is fully configured, authenticated `GET` and `HEAD` requests to `/api/v1/redirects/{slug}/qr.png` return a stateless, non-cacheable PNG encoding exactly `GOTTEM_ADMIN_ORIGIN/{slug}`. Existing disabled or expired records remain available for QR generation; missing records return 404. The route accepts either the browser session cookie or the management bearer token and is not registered when the admin configuration is disabled. QR generation does not store files or metadata and does not encode the destination URL or tracking parameters.
 
 The frontend is embedded HTML, CSS, and vanilla JavaScript with no runtime CDN or Node dependency. HTMX remains a possible future enhancement only if real interaction needs justify it.
 

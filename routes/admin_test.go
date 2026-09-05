@@ -64,7 +64,8 @@ func TestAdminPageAndAssetsSecurityAndAccessibilityContracts(t *testing.T) {
 		`<main`, `id="login-form"`, `type="password"`, `autocomplete="current-password"`,
 		`brand-wordmark`, `gottem<span>.link</span>`, `id="create-form"`, `id="create-expiration"`, `type="datetime-local"`,
 		`id="search"`, `role="status"`, `aria-live="polite"`, `<template id="redirect-template"`,
-		`class="expiration-detail"`, `class="destination-updated"`, `class="usage-count"`, `class="last-accessed"`, `aria-label="Usage statistics"`, `class="button quiet expiration"`,
+		`class="expiration-detail"`, `class="destination-updated"`, `class="usage-count"`, `class="last-accessed"`, `aria-label="Usage statistics"`, `class="button quiet qr"`, `class="button quiet expiration"`,
+		`id="qr-dialog"`, `aria-labelledby="qr-title"`, `id="qr-image"`, `alt=""`, `id="qr-url"`, `id="qr-status"`, `role="status"`, `id="qr-error"`, `role="alert"`, `id="qr-download"`, `download`, `data-close-qr`,
 		`id="expiration-dialog"`, `id="expiration-form"`, `id="expiration-value"`, `step="0.001"`, `id="expiration-error"`, `role="alert"`, `id="clear-expiration"`,
 		`id="delete-dialog"`, `<script src="/admin/assets/admin.js" defer></script>`,
 		`<link rel="stylesheet" href="/admin/assets/admin.css">`,
@@ -82,8 +83,8 @@ func TestAdminPageAndAssetsSecurityAndAccessibilityContracts(t *testing.T) {
 		contentType string
 		contains    []string
 	}{
-		{path: "/admin/assets/admin.css", contentType: "text/css; charset=utf-8", contains: []string{"--paper: #eeeae1", "--ink: #26251f", "--accent: #e3b94e", "--signal: #765400", "Arial Black", "Georgia", "Courier New", ".button.header-button", "min-height: 44px", ":focus-visible", ".status.expired", "@media (max-width:", "prefers-reduced-motion"}},
-		{path: "/admin/assets/admin.js", contentType: "text/javascript; charset=utf-8", contains: []string{"textContent", "navigator.clipboard", "fetch(", "confirmDelete", "redirectStatus", "expires_at", "destination_updated_at", "click_count", "last_accessed_at", "approximately", "expirationDialog.showModal()"}},
+		{path: "/admin/assets/admin.css", contentType: "text/css; charset=utf-8", contains: []string{"--paper: #eeeae1", "--ink: #26251f", "--accent: #e3b94e", "--signal: #765400", "Arial Black", "Georgia", "Courier New", ".button.header-button", "min-height: 44px", ":focus-visible", ".status.expired", ".qr-image", ".qr-url", "@media (max-width:", "prefers-reduced-motion"}},
+		{path: "/admin/assets/admin.js", contentType: "text/javascript; charset=utf-8", contains: []string{"textContent", "navigator.clipboard", "fetch(", "confirmDelete", "redirectStatus", "expires_at", "destination_updated_at", "click_count", "last_accessed_at", "approximately", "openQRCodeDialog", "qrDialog.showModal()", "expirationDialog.showModal()"}},
 	} {
 		response := httptest.NewRecorder()
 		router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, asset.path, nil))
@@ -108,6 +109,19 @@ func TestAdminPageAndAssetsSecurityAndAccessibilityContracts(t *testing.T) {
 				"scheduleStatusRefresh()",
 				`document.addEventListener("visibilitychange"`,
 				"expirationError.textContent = error.message",
+				"if (qrDialog.open) qrDialog.close()",
+				"resetQRCodeDialog()",
+				"const imageURL = `/api/v1/redirects/${encodeURIComponent(redirect.slug)}/qr.png`",
+				"qrImage.addEventListener(\"load\"",
+				"qrImage.addEventListener(\"error\"",
+				"qrDownload.download = `${redirect.slug}-qr.png`",
+				"await authenticatedFetch(imageURL)",
+				"await response.blob()",
+				"URL.createObjectURL(blob)",
+				"URL.revokeObjectURL(qrObjectURL)",
+				"qrDownload.href = qrObjectURL",
+				"qrImage.src = qrObjectURL",
+				"qrImage.removeAttribute(\"src\")",
 				"if (expirationDialog.open) expirationDialog.close()",
 				"catch (error) {\n    setNotice(error.message);\n    return;\n  }\n  redirects = [];",
 			} {
@@ -278,7 +292,7 @@ func testDatabase(t *testing.T) *db.DbWrapper {
 
 func assertSecurityHeaders(t *testing.T, header http.Header) {
 	t.Helper()
-	if got := header.Get("Content-Security-Policy"); got != "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'" {
+	if got := header.Get("Content-Security-Policy"); got != "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' blob:; connect-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'" {
 		t.Errorf("Content-Security-Policy = %q", got)
 	}
 	for name, want := range map[string]string{

@@ -19,7 +19,8 @@ Updated against `main` at `87a5242` on 2026-09-05.
 - **Complete:** schema version 4 is applied transactionally by the candidate-only LiteFS migration phase. Existing data is preserved, serving remains non-migrating, and unknown newer schemas fail closed.
 - **Complete:** production runs in `sjc` on encrypted Fly volumes with LiteFS, health/readiness checks, graceful shutdown, restore verification, and a documented deployment path.
 - **Complete:** aggregate click count and last-accessed time are available without retaining IP addresses, user agents, referrers, or raw visit events.
-- **Next:** Milestone 3 is optional enhancement work, beginning with QR-code generation only when useful.
+- **Complete:** Milestone 3.1 adds stateless authenticated QR preview/download for existing links when the admin UI is fully configured.
+- **Next:** Remaining Milestone 3 enhancements are unprioritized options.
 
 The service is live at `https://gottem.link`; routine link management no longer requires direct database access.
 
@@ -257,7 +258,7 @@ Keep it short and update it as commands become real:
 
 Only prioritize these after normal link management is reliable.
 
-#### 3.1 QR codes — Planned
+#### 3.1 QR codes — Complete
 
 - Add an authenticated QR-code image endpoint for an existing short link.
 - Add a quiet admin action that previews and downloads the QR code.
@@ -265,6 +266,8 @@ Only prioritize these after normal link management is reliable.
 - Keep QR generation stateless and covered by API, security, image-decoding, and browser tests.
 
 **Done when:** an authenticated user can preview and download a scannable QR code from the admin UI, the decoded value exactly matches the short URL, and unauthorized or missing links do not expose an image.
+
+**Delivered:** the fully configured admin registers a browser-session-or-bearer-authenticated `GET`/`HEAD` PNG endpoint. It generates a deterministic high-ECC QR code in memory with a four-module quiet zone and no persistence, encoding only the configured canonical origin plus the stored slug even for disabled or expired records. The dependency-free admin adds an accessible preview/download dialog with visible load failure, session-reset cleanup, keyboard focus restoration, and mobile-safe controls.
 
 #### Later options
 

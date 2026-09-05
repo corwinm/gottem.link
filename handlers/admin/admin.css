@@ -82,8 +82,13 @@ input::placeholder { color: #7c786e; }
 .actions { display: flex; flex-wrap: wrap; gap: 6px; justify-content: end; max-width: 380px; }
 .actions .button { min-height: 44px; padding-inline: 10px; }
 
- dialog { width: min(100% - 32px, 500px); padding: 28px; color: var(--ink); background: var(--paper); border: 2px solid var(--ink); border-radius: 0; box-shadow: 14px 14px 0 rgb(38 37 31 / .24); }
+dialog { width: min(100% - 32px, 500px); max-height: calc(100dvh - 32px); overflow: auto; padding: 28px; color: var(--ink); background: var(--paper); border: 2px solid var(--ink); border-radius: 0; box-shadow: 14px 14px 0 rgb(38 37 31 / .24); }
 dialog::backdrop { background: rgb(38 37 31 / .56); }
+.qr-preview { display: grid; min-height: 240px; place-items: center; margin-top: 18px; background: #fff; border: 1px solid var(--soft-rule); }
+.qr-image { display: block; width: min(100%, 328px); height: auto; image-rendering: pixelated; }
+.qr-status { margin: 0; color: var(--muted); font-size: .9rem; }
+.qr-url { overflow-wrap: anywhere; margin: 16px 0 0; font: 700 .82rem / 1.45 "Courier New", monospace; }
+.dialog-actions a.button { display: inline-flex; align-items: center; justify-content: center; text-decoration: none; }
 #expiration-form { display: grid; gap: 10px; }
 .dialog-error { min-height: 1.4em; margin: 0; color: var(--signal); font-size: .9rem; }
 .dialog-actions { display: flex; justify-content: end; gap: 8px; margin-top: 24px; }
