@@ -71,7 +71,7 @@ func TestPublicHomepageResources(t *testing.T) {
 				}
 				if method == http.MethodGet && resource.path != "/" {
 					css := response.Body.String()
-					for _, required := range []string{":focus-visible", "min-height: 44px", "min-width: 44px"} {
+					for _, required := range []string{"--accent: #e3b94e", "--signal: #765400", ":focus-visible", "min-height: 44px", "min-width: 44px"} {
 						if !strings.Contains(css, required) {
 							t.Errorf("CSS missing %q", required)
 						}
