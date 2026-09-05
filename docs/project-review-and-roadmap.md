@@ -242,7 +242,16 @@ Keep it short and update it as commands become real:
 
 **Delivered:** the embedded dependency-free console uses short-lived signed browser sessions, exact-origin protection for cookie-authenticated writes, and the existing JSON API. Bearer authentication remains available for the CLI, automation, and backup export; HTMX remains future-only.
 
-#### 2.2 Link lifecycle controls
+#### 2.2 Minimal public homepage
+
+- Replace the placeholder root response with a small, branded explanation of gottem.link.
+- Include a clear admin sign-in link without exposing link creation or management publicly.
+- Keep the page dependency-free and embedded in the Go binary alongside the admin UI.
+- Avoid marketing sections, account features, analytics scripts, or a frontend framework.
+
+**Done when:** `https://gottem.link/` is useful to a first-time visitor, links to the private admin console, and remains fast and accessible on phone and desktop.
+
+#### 2.3 Link lifecycle controls
 
 - Add optional expiration, disable/enable, and destination replacement.
 - Preserve enough audit information to understand when a destination changed.
@@ -250,7 +259,7 @@ Keep it short and update it as commands become real:
 
 **Done when:** lifecycle behavior is explicit, tested, and visible in the API/CLI/UI.
 
-#### 2.3 Privacy-conscious usage statistics
+#### 2.4 Privacy-conscious usage statistics
 
 - Start with aggregate click count and last-accessed time.
 - Avoid storing IP addresses, user-agent strings, or referrers unless there is a specific use case and retention policy.
@@ -285,5 +294,6 @@ Avoid accounts, teams, billing, distributed caches, event pipelines, or multi-re
 10. **Complete:** Add the JSON-capable management CLI.
 11. **Complete:** Add dry-run import/export and restore verification.
 12. **Complete:** Add a minimal private admin UI.
+13. Add a minimal public homepage.
 
 The first three issues may be grouped into one recovery PR only if the tests remain focused and the diff stays small. Later issues should generally be separate PRs.
