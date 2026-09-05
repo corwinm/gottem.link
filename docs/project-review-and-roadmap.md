@@ -12,40 +12,20 @@
 
 ## Current status
 
-Updated against the milestone 1.2 implementation at `96bf96c` on 2026-09-03.
+Updated against `main` at `87a5242` on 2026-09-05.
 
-- **Complete:** Go 1.27 is aligned across local, CI, Docker, and Fly builds; `govulncheck` is clean.
-- **Complete:** configuration is parsed once, the configured database is injected into the router, and redirect behavior is covered for found, missing, and database-error cases.
-- **Complete:** found slugs return HTTP 302 with `Location`; missing slugs return 404; operational database failures return 500.
-- **Complete:** schema version 3 is applied transactionally by an explicit candidate-only LiteFS migration command; serving remains non-writing, legacy rows are preserved, and incompatible or newer schemas fail closed.
-- **Complete:** PR #10 corrected Fly's primary region from `sea` to `sjc`, matching both deployed machines and volumes. This restored LiteFS primary election and public HTTP availability.
-- **Complete:** the root `AGENTS.md`, README, Makefile, and CI now define one local and remote quality contract.
-- **Complete:** deployment topology, container behavior, health/readiness, graceful shutdown, and backup/restore verification are documented and tested.
-- **Complete:** the bearer-token-protected management API creates, lists, inspects, updates, disables, and deletes redirects; it is unavailable when no token is configured.
-- **Complete:** management writes enforce destination and custom-slug validation, generate short slugs when requested, and retry generated-slug collisions safely.
-- **Next:** add the practical JSON-capable management client in milestone 1.3.
+- **Complete:** Milestones 0–2 are deployed. The service has a tested redirect path, authenticated management API and CLI, import/export, encrypted backups, a private admin UI, a public homepage, lifecycle controls, and privacy-conscious aggregate usage statistics.
+- **Complete:** Go 1.27 is aligned across local, CI, Docker, and Fly builds; formatting, tests, race tests, vet, vulnerability scanning, builds, backup restoration, and production-image smoke tests are enforced.
+- **Complete:** schema version 4 is applied transactionally by the candidate-only LiteFS migration phase. Existing data is preserved, serving remains non-migrating, and unknown newer schemas fail closed.
+- **Complete:** production runs in `sjc` on encrypted Fly volumes with LiteFS, health/readiness checks, graceful shutdown, restore verification, and a documented deployment path.
+- **Complete:** aggregate click count and last-accessed time are available without retaining IP addresses, user agents, referrers, or raw visit events.
+- **Next:** Milestone 3 is optional enhancement work, beginning with QR-code generation only when useful.
 
-The service is reachable at `https://gottem.link`, and authenticated management no longer requires direct database access.
+The service is live at `https://gottem.link`; routine link management no longer requires direct database access.
 
 ## Verified current state
 
-Reviewed against `main` at `9c4cef3` on 2026-09-02.
-
-- The repository has 15 tracked files and 401 tracked lines; 162 lines are Go.
-- The code is split into `main`, `routes`, `handlers`, and `db` packages.
-- Go 1.24.1 resolves correctly on this machine.
-- `go test ./...` and `go test -race ./...` pass only because there are no test files.
-- `go vet ./...` passes.
-- A local application binary builds successfully.
-- A toolchain-aware `govulncheck ./...` reports 25 reachable vulnerabilities in the Go 1.24.1 standard library. The earlier scan under an automatically selected Go 1.26.8 toolchain was clean, confirming that the pinned application toolchain—not the application dependency—is the source of these findings.
-- `github.com/mattn/go-sqlite3` is declared as indirect even though it is imported directly; the repository uses v1.14.24 and a newer version is available.
-- The public root returns HTTP 200 with `Hello, World!`; an unknown slug returns HTTP 404.
-- GitHub Actions contains one build/deploy workflow. Corwin reports that deployment works, and the live application confirms runtime availability. No workflow runs are currently retained, so this review did not independently verify a current workflow run.
-- `main` has no branch protection. Dependabot and code scanning are not enabled; secret scanning reports no alerts.
-- A `Fly Deploy` environment and `FLY_API_TOKEN` secret exist. The workflow deploys without explicitly targeting that environment; attaching it would be optional hardening rather than a prerequisite for deployment.
-- Docker could not be exercised locally because Docker is not installed on this machine.
-- Fly's internal machine and volume state could not be inspected because `flyctl` is not installed. Public HTTP checks confirm that the deployment is running and serving traffic.
-- Follow-up verification after this review: GitHub Actions run `33608364149` successfully built and deployed `main` at `6bfba77`, confirming the checked-in deployment workflow currently completes.
+The Milestone 2.4 deployment at `87a5242` passed GitHub Quality, Container, and Deploy jobs. Production health and readiness returned 200, schema version 4 passed `PRAGMA quick_check`, and a disposable production link verified aggregate click tracking before being removed.
 
 ## Original findings
 
@@ -275,9 +255,19 @@ Keep it short and update it as commands become real:
 
 ### Milestone 3 — Optional enhancements
 
-Only prioritize these after normal link management is reliable:
+Only prioritize these after normal link management is reliable.
 
-- QR-code generation for a short link.
+#### 3.1 QR codes — Planned
+
+- Add an authenticated QR-code image endpoint for an existing short link.
+- Add a quiet admin action that previews and downloads the QR code.
+- Encode the canonical short URL only; do not add public creation controls, tracking parameters, or stored QR artifacts.
+- Keep QR generation stateless and covered by API, security, image-decoding, and browser tests.
+
+**Done when:** an authenticated user can preview and download a scannable QR code from the admin UI, the decoded value exactly matches the short URL, and unauthorized or missing links do not expose an image.
+
+#### Later options
+
 - Tags and notes for organization.
 - Bulk actions and stale-link review.
 - Per-link redirect status choice where it has a real use case.
