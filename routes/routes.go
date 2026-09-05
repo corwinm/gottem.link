@@ -66,6 +66,7 @@ func newRouterWithAdmin(database *db.DbWrapper, managementToken, backupToken str
 		sessions := handlers.NewSessionAuth(managementToken, admin.SessionSecret, admin.Origin, admin.SecureCookies, nil)
 		managementAuth = sessions.BrowserOrBearerAuth
 		router.Handle("/api/v1/session", sessions.SessionHandler())
+		router.Handle("/api/v1/redirects/{slug}/qr.png", managementAuth(handlers.ManagementQRCodeHandler(database, admin.Origin)))
 		router.Handle("/admin", handlers.AdminPageOrLegacyRedirectHandler(database))
 		router.Handle("/admin/{$}", handlers.AdminPageHandler())
 		router.Handle("/admin/assets/admin.css", handlers.AdminAssetHandler("admin.css", "text/css; charset=utf-8"))

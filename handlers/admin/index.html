@@ -86,6 +86,7 @@
       </div>
       <div class="actions" aria-label="Link actions">
         <button class="button quiet copy" type="button">Copy</button>
+        <button class="button quiet qr" type="button">QR code</button>
         <button class="button quiet edit" type="button">Edit</button>
         <button class="button quiet expiration" type="button">Expiration</button>
         <button class="button quiet toggle" type="button"></button>
@@ -93,6 +94,22 @@
       </div>
     </li>
   </template>
+
+  <dialog id="qr-dialog" aria-labelledby="qr-title">
+    <p class="eyebrow">QR code</p>
+    <h2 id="qr-title">Short link QR code</h2>
+    <p class="muted">Scan or download this code for the exact short URL.</p>
+    <div class="qr-preview">
+      <img id="qr-image" class="qr-image" alt="" hidden>
+      <p id="qr-status" class="qr-status" role="status">Loading QR code…</p>
+      <p id="qr-error" class="dialog-error" role="alert"></p>
+    </div>
+    <p id="qr-url" class="qr-url"></p>
+    <div class="dialog-actions">
+      <button class="button quiet" type="button" data-close-qr>Close</button>
+      <a id="qr-download" class="button primary" href="" download>Download PNG</a>
+    </div>
+  </dialog>
 
   <dialog id="expiration-dialog" aria-labelledby="expiration-title">
     <form id="expiration-form">

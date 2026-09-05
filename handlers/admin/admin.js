@@ -12,6 +12,13 @@ const emptyState = document.querySelector("#empty-state");
 const filterEmptyState = document.querySelector("#filter-empty-state");
 const list = document.querySelector("#redirect-list");
 const template = document.querySelector("#redirect-template");
+const qrDialog = document.querySelector("#qr-dialog");
+const qrTitle = document.querySelector("#qr-title");
+const qrImage = document.querySelector("#qr-image");
+const qrURL = document.querySelector("#qr-url");
+const qrStatus = document.querySelector("#qr-status");
+const qrError = document.querySelector("#qr-error");
+const qrDownload = document.querySelector("#qr-download");
 const expirationDialog = document.querySelector("#expiration-dialog");
 const expirationForm = document.querySelector("#expiration-form");
 const expirationTitle = document.querySelector("#expiration-title");
@@ -27,12 +34,16 @@ let pendingDelete = null;
 let pendingExpiration = null;
 let originalExpirationValue = "";
 let statusTimer = null;
+let qrObjectURL = null;
+let qrRequestGeneration = 0;
 
 function setAuthenticated(authenticated) {
   loginView.hidden = authenticated;
   adminView.hidden = !authenticated;
   logoutButton.hidden = !authenticated;
   if (!authenticated) {
+    if (qrDialog.open) qrDialog.close();
+    resetQRCodeDialog();
     if (statusTimer !== null) clearTimeout(statusTimer);
     statusTimer = null;
     document.querySelector("#token").focus();
@@ -44,12 +55,13 @@ function setNotice(message, success = false) {
   notice.classList.toggle("success", success);
 }
 
-async function api(path, options = {}) {
+async function authenticatedFetch(path, options = {}) {
   const response = await fetch(path, {
     ...options,
     headers: options.body ? { "Content-Type": "application/json" } : undefined,
   });
   if (response.status === 401) {
+    if (qrDialog.open) qrDialog.close();
     if (expirationDialog.open) expirationDialog.close();
     if (deleteDialog.open) deleteDialog.close();
     setAuthenticated(false);
@@ -65,6 +77,11 @@ async function api(path, options = {}) {
     }
     throw new Error(message);
   }
+  return response;
+}
+
+async function api(path, options = {}) {
+  const response = await authenticatedFetch(path, options);
   if (response.status === 204) return null;
   return response.json();
 }
@@ -176,6 +193,7 @@ function renderRedirects() {
         setNotice("Could not access the clipboard.");
       }
     });
+    card.querySelector(".qr").addEventListener("click", () => openQRCodeDialog(redirect, shortURL));
     card.querySelector(".edit").addEventListener("click", () => editRedirect(redirect));
     card.querySelector(".expiration").addEventListener("click", () => openExpirationDialog(redirect));
     const toggle = card.querySelector(".toggle");
@@ -185,6 +203,49 @@ function renderRedirects() {
     list.append(card);
   }
   scheduleStatusRefresh();
+}
+
+function resetQRCodeDialog() {
+  qrRequestGeneration += 1;
+  if (qrObjectURL !== null) {
+    URL.revokeObjectURL(qrObjectURL);
+    qrObjectURL = null;
+  }
+  qrImage.hidden = true;
+  qrImage.removeAttribute("src");
+  qrTitle.textContent = "Short link QR code";
+  qrURL.textContent = "";
+  qrStatus.textContent = "Loading QR code…";
+  qrError.textContent = "";
+  qrDownload.hidden = true;
+  qrDownload.removeAttribute("href");
+  qrDownload.removeAttribute("download");
+}
+
+async function openQRCodeDialog(redirect, shortURL) {
+  resetQRCodeDialog();
+  const requestGeneration = qrRequestGeneration;
+  const imageURL = `/api/v1/redirects/${encodeURIComponent(redirect.slug)}/qr.png`;
+  qrTitle.textContent = `QR code for /${redirect.slug}`;
+  qrURL.textContent = shortURL;
+  qrDownload.download = `${redirect.slug}-qr.png`;
+  qrDialog.showModal();
+  try {
+    const response = await authenticatedFetch(imageURL);
+    const blob = await response.blob();
+    if (!qrDialog.open || requestGeneration !== qrRequestGeneration) return;
+    qrObjectURL = URL.createObjectURL(blob);
+    qrDownload.href = qrObjectURL;
+    qrImage.src = qrObjectURL;
+  } catch (error) {
+    if (error.message === "Your session ended. Sign in again.") {
+      setNotice(error.message);
+      return;
+    }
+    if (!qrDialog.open || requestGeneration !== qrRequestGeneration) return;
+    qrStatus.textContent = "";
+    qrError.textContent = error.message;
+  }
 }
 
 async function editRedirect(redirect) {
@@ -291,6 +352,24 @@ createForm.addEventListener("submit", async (event) => {
     submit.disabled = false;
   }
 });
+
+qrImage.addEventListener("load", () => {
+  if (!qrDialog.open) return;
+  qrImage.hidden = false;
+  qrStatus.textContent = "";
+  qrError.textContent = "";
+  qrDownload.hidden = false;
+});
+qrImage.addEventListener("error", () => {
+  if (!qrImage.hasAttribute("src") || !qrDialog.open) return;
+  qrImage.hidden = true;
+  qrStatus.textContent = "";
+  qrError.textContent = "The QR code could not be loaded. Close this dialog and try again.";
+  qrDownload.hidden = true;
+  qrDownload.removeAttribute("href");
+});
+document.querySelector("[data-close-qr]").addEventListener("click", () => qrDialog.close());
+qrDialog.addEventListener("close", resetQRCodeDialog);
 
 expirationForm.addEventListener("submit", async (event) => {
   event.preventDefault();
