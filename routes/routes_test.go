@@ -75,6 +75,34 @@ func TestRouterTracksOnlySuccessfulPublicRedirects(t *testing.T) {
 	}
 }
 
+func TestRouterTracksOnlyValidNonexistentSlugsAsMisses(t *testing.T) {
+	database, err := db.GetDB(filepath.Join(t.TempDir(), "gottem.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(database.Close)
+	disabled, _ := database.CreateRedirect("disabled", "https://example.com/disabled")
+	_, _ = database.DisableRedirect(disabled.Slug)
+	past := "2000-01-01T00:00:00Z"
+	_, _ = database.CreateRedirectWithExpiration("expired", "https://example.com/expired", &past)
+	writer := db.NewAccessWriter(database, 16, nil)
+	router := routes.NewRouterWithStats(database, "", writer)
+
+	for _, path := range []string{"/Shared-Typo", "/shared-typo", "/disabled", "/expired", "/not_valid"} {
+		router.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, path, nil))
+	}
+	if err := writer.Close(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	misses, err := database.ListSlugMisses()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(misses) != 1 || misses[0].Slug != "shared-typo" || misses[0].MissCount != 2 {
+		t.Fatalf("misses = %#v", misses)
+	}
+}
+
 func TestRouterRegistersAuthenticatedInternalAccessWrite(t *testing.T) {
 	database, err := db.GetDB(filepath.Join(t.TempDir(), "gottem.db"))
 	if err != nil {
@@ -97,6 +125,27 @@ func TestRouterRegistersAuthenticatedInternalAccessWrite(t *testing.T) {
 	stored, err := database.GetRedirect("active")
 	if err != nil || stored.ClickCount != 1 {
 		t.Fatalf("stored = %#v, err = %v", stored, err)
+	}
+}
+
+func TestRouterRegistersAuthenticatedInternalMissWrite(t *testing.T) {
+	database, err := db.GetDB(filepath.Join(t.TempDir(), "gottem.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(database.Close)
+	router := routes.NewRouterWithAdminStats(database, "shared-token", "", routes.AdminConfig{}, nil, database)
+	request := httptest.NewRequest(http.MethodPost, "/.internal/misses", strings.NewReader(`{"slug":"shared-typo","missed_at":"2026-01-02T03:04:05Z"}`))
+	request.RemoteAddr = "127.0.0.1:1234"
+	request.Header.Set("Authorization", "Bearer shared-token")
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, request)
+	if response.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, body = %q", response.Code, response.Body.String())
+	}
+	misses, err := database.ListSlugMisses()
+	if err != nil || len(misses) != 1 || misses[0].Slug != "shared-typo" {
+		t.Fatalf("misses = %#v, err = %v", misses, err)
 	}
 }
 

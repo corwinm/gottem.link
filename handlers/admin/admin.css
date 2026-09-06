@@ -42,6 +42,18 @@ h2 { margin-bottom: 10px; font: 400 1.6rem / 1.1 Georgia, serif; }
 .section-heading { display: flex; align-items: end; justify-content: space-between; gap: 30px; padding: 44px 0 22px; border-bottom: 1px solid var(--rule); }
 .section-note { margin: 0 0 5px; font-size: .9rem; }
 .create-panel { display: grid; grid-template-columns: minmax(240px, 2fr) minmax(150px, .8fr) minmax(190px, 1fr) auto; gap: 12px; align-items: end; padding: 22px 0 24px; border-bottom: 2px solid var(--ink); }
+.misses-panel { display: grid; grid-template-columns: minmax(220px, .8fr) minmax(0, 1.2fr); gap: 28px; padding: 25px 0; border-bottom: 1px solid var(--rule); }
+.misses-panel h2 { margin-bottom: 8px; }
+.misses-panel .section-note { max-width: 420px; line-height: 1.5; }
+.misses-empty { align-self: center; margin: 0; color: var(--muted); text-align: right; }
+.miss-list { display: grid; margin: 0; padding: 0; list-style: none; }
+.miss-card { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 18px; align-items: center; padding: 12px 0; border-bottom: 1px solid var(--soft-rule); }
+.miss-card:first-child { padding-top: 0; }
+.miss-card:last-child { padding-bottom: 0; border-bottom: 0; }
+.miss-slug { overflow-wrap: anywhere; font: 700 1rem / 1.35 "Courier New", monospace; }
+.miss-details { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 6px 0 0; color: var(--muted); font: .68rem / 1.45 "Courier New", monospace; }
+.miss-count::before { content: "MISS "; color: var(--signal); }
+.miss-last-seen::before { content: "· LAST "; color: var(--signal); }
 .field { display: grid; gap: 7px; min-width: 0; }
 label { font: 700 .72rem / 1.4 "Courier New", monospace; letter-spacing: .035em; text-transform: uppercase; }
 input { width: 100%; min-height: 44px; padding: 10px 12px; color: var(--ink); background: var(--panel); border: 1px solid var(--rule); border-radius: 0; }
@@ -112,6 +124,10 @@ dialog::backdrop { background: rgb(38 37 31 / .56); }
   .section-heading { display: block; padding-top: 32px; }
   .section-note { margin-top: 12px; }
   .create-panel { grid-template-columns: 1fr; }
+  .misses-panel { grid-template-columns: 1fr; gap: 16px; }
+  .misses-empty { text-align: left; }
+  .miss-card { grid-template-columns: 1fr; }
+  .use-miss { width: 100%; }
   .destination-field { grid-column: auto; }
   .redirect-card { grid-template-columns: 1fr; gap: 15px; }
   .actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); max-width: none; }

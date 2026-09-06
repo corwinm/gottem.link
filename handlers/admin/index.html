@@ -55,6 +55,16 @@
         <button class="button primary create-button" type="submit">Create link</button>
       </form>
 
+      <section id="misses-panel" class="misses-panel" aria-labelledby="misses-heading">
+        <div>
+          <p class="eyebrow">Needs attention</p>
+          <h2 id="misses-heading">Missing links</h2>
+          <p class="section-note">Recent valid slugs that reached the 404 page. Use one to create the link that was expected.</p>
+        </div>
+        <p id="misses-empty-state" class="misses-empty">No missing links recorded.</p>
+        <ul id="miss-list" class="miss-list" aria-label="Missing links"></ul>
+      </section>
+
       <div class="toolbar">
         <label class="search-label" for="search">Search links</label>
         <input id="search" type="search" placeholder="Search slug or destination" autocomplete="off">
@@ -92,6 +102,16 @@
         <button class="button quiet toggle" type="button"></button>
         <button class="button danger delete" type="button">Delete</button>
       </div>
+    </li>
+  </template>
+
+  <template id="miss-template">
+    <li class="miss-card">
+      <div>
+        <code class="miss-slug"></code>
+        <p class="miss-details"><span class="miss-count"></span><span class="miss-last-seen"></span></p>
+      </div>
+      <button class="button quiet use-miss" type="button">Create link</button>
     </li>
   </template>
 

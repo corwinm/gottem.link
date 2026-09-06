@@ -12,14 +12,15 @@
 
 ## Current status
 
-Updated against `main` at `87a5242` on 2026-09-05.
+Updated against `main` at `2fde23f` on 2026-09-05.
 
 - **Complete:** Milestones 0–2 are deployed. The service has a tested redirect path, authenticated management API and CLI, import/export, encrypted backups, a private admin UI, a public homepage, lifecycle controls, and privacy-conscious aggregate usage statistics.
 - **Complete:** Go 1.27 is aligned across local, CI, Docker, and Fly builds; formatting, tests, race tests, vet, vulnerability scanning, builds, backup restoration, and production-image smoke tests are enforced.
-- **Complete:** schema version 4 is applied transactionally by the candidate-only LiteFS migration phase. Existing data is preserved, serving remains non-migrating, and unknown newer schemas fail closed.
+- **Complete:** schema version 5 is applied transactionally by the candidate-only LiteFS migration phase. Existing data is preserved, serving remains non-migrating, and unknown newer schemas fail closed.
 - **Complete:** production runs in `sjc` on encrypted Fly volumes with LiteFS, health/readiness checks, graceful shutdown, restore verification, and a documented deployment path.
 - **Complete:** aggregate click count and last-accessed time are available without retaining IP addresses, user agents, referrers, or raw visit events.
 - **Complete:** Milestone 3.1 adds stateless authenticated QR preview/download for existing links when the admin UI is fully configured.
+- **Complete:** Milestone 3.2 adds a branded missing-link page and privacy-conscious aggregate miss reporting in the admin console.
 - **Next:** Remaining Milestone 3 enhancements are unprioritized options.
 
 The service is live at `https://gottem.link`; routine link management no longer requires direct database access.
@@ -268,6 +269,18 @@ Only prioritize these after normal link management is reliable.
 **Done when:** an authenticated user can preview and download a scannable QR code from the admin UI, the decoded value exactly matches the short URL, and unauthorized or missing links do not expose an image.
 
 **Delivered:** the fully configured admin registers a browser-session-or-bearer-authenticated `GET`/`HEAD` PNG endpoint. It generates a deterministic high-ECC QR code in memory with a four-module quiet zone and no persistence, encoding only the configured canonical origin plus the stored slug even for disabled or expired records. The dependency-free admin adds an accessible preview/download dialog with visible load failure, session-reset cleanup, keyboard focus restoration, and mobile-safe controls.
+
+#### 3.2 Missing-link recovery — Complete
+
+- Replace the plain-text unknown-slug response with a branded, recipient-focused 404 page.
+- Aggregate valid nonexistent slugs by count and first/last miss without retaining request metadata.
+- Show recent unresolved misses in the authenticated admin and let the owner prefill a missed slug into the create form.
+- Do not count disabled, expired, malformed, or reserved paths as missing links.
+- Bound storage and keep writes off the response path through the existing LiteFS-forwarded aggregate queue.
+
+**Done when:** an unknown valid slug returns a useful HTML 404, repeated misses aggregate case-insensitively, the admin can use a missed slug to create the expected redirect, and no IP address, user agent, referrer, or raw request event is retained.
+
+**Delivered:** schema version 5 adds at most 500 aggregate missing-slug rows and the authenticated API returns the 100 most recent. Corrected slugs are removed when their redirect is created and delayed queued misses cannot recreate them. The embedded admin shows count and last-missed time with a `Create link` action that prefills the existing form. Public responses do not echo the requested slug.
 
 #### Later options
 

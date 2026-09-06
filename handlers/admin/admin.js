@@ -12,6 +12,9 @@ const emptyState = document.querySelector("#empty-state");
 const filterEmptyState = document.querySelector("#filter-empty-state");
 const list = document.querySelector("#redirect-list");
 const template = document.querySelector("#redirect-template");
+const missList = document.querySelector("#miss-list");
+const missTemplate = document.querySelector("#miss-template");
+const missesEmptyState = document.querySelector("#misses-empty-state");
 const qrDialog = document.querySelector("#qr-dialog");
 const qrTitle = document.querySelector("#qr-title");
 const qrImage = document.querySelector("#qr-image");
@@ -30,6 +33,7 @@ const deleteDialog = document.querySelector("#delete-dialog");
 const deleteMessage = document.querySelector("#delete-message");
 const confirmDelete = document.querySelector("#confirm-delete");
 let redirects = [];
+let misses = [];
 let pendingDelete = null;
 let pendingExpiration = null;
 let originalExpirationValue = "";
@@ -96,6 +100,36 @@ async function loadRedirects() {
   } finally {
     loadingState.hidden = true;
   }
+}
+
+async function loadMisses() {
+  try {
+    misses = await api("/api/v1/misses");
+    renderMisses();
+  } catch (error) {
+    setNotice(error.message);
+  }
+}
+
+function renderMisses() {
+  missList.replaceChildren();
+  missesEmptyState.hidden = misses.length !== 0;
+  for (const miss of misses) {
+    const card = missTemplate.content.firstElementChild.cloneNode(true);
+    card.querySelector(".miss-slug").textContent = `/${miss.slug}`;
+    const count = miss.miss_count;
+    card.querySelector(".miss-count").textContent = `${count} ${count === 1 ? "request" : "requests"}`;
+    card.querySelector(".miss-last-seen").textContent = formatTimestamp(miss.last_missed_at);
+    card.querySelector(".use-miss").addEventListener("click", () => useMissedSlug(miss));
+    missList.append(card);
+  }
+}
+
+function useMissedSlug(miss) {
+  document.querySelector("#slug").value = miss.slug;
+  createForm.scrollIntoView({ behavior: "smooth", block: "center" });
+  document.querySelector("#destination").focus({ preventScroll: true });
+  setNotice(`Add the destination for /${miss.slug}.`);
 }
 
 function redirectStatus(redirect) {
@@ -323,7 +357,7 @@ loginForm.addEventListener("submit", async (event) => {
     loginForm.reset();
     setAuthenticated(true);
     setNotice("");
-    await loadRedirects();
+    await Promise.all([loadRedirects(), loadMisses()]);
   } catch (error) {
     setNotice(error.message);
   } finally {
@@ -345,7 +379,7 @@ createForm.addEventListener("submit", async (event) => {
     const created = await api("/api/v1/redirects", { method: "POST", body: JSON.stringify(payload) });
     createForm.reset();
     setNotice(`Created /${created.slug}`, true);
-    await loadRedirects();
+    await Promise.all([loadRedirects(), loadMisses()]);
   } catch (error) {
     setNotice(error.message);
   } finally {
@@ -399,7 +433,9 @@ logoutButton.addEventListener("click", async () => {
     return;
   }
   redirects = [];
+  misses = [];
   list.replaceChildren();
+  missList.replaceChildren();
   setAuthenticated(false);
 });
 
@@ -426,7 +462,7 @@ deleteDialog.addEventListener("close", async () => {
   try {
     const state = await api("/api/v1/session");
     setAuthenticated(state.authenticated);
-    if (state.authenticated) await loadRedirects();
+    if (state.authenticated) await Promise.all([loadRedirects(), loadMisses()]);
   } catch (error) {
     setAuthenticated(false);
     setNotice(error.message);

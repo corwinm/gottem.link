@@ -10,14 +10,19 @@ type AccessStore interface {
 	RecordRedirectAccess(ctx context.Context, id int64, accessedAt time.Time) error
 }
 
-type accessRecord struct {
-	id int64
-	at time.Time
+type MissStore interface {
+	RecordSlugMiss(ctx context.Context, slug string, missedAt time.Time) error
 }
 
-// AccessWriter persists aggregate redirect accesses on one bounded background
-// queue. Track never waits for storage; false means the event was deliberately
-// dropped because the queue was full or shutdown had begun.
+type accessRecord struct {
+	id   int64
+	slug string
+	at   time.Time
+}
+
+// AccessWriter persists aggregate redirect accesses and valid slug misses on one
+// bounded background queue. Tracking never waits for storage; false means the
+// event was deliberately dropped because the queue was full or shutdown began.
 type AccessWriter struct {
 	store   AccessStore
 	queue   chan accessRecord
@@ -40,13 +45,21 @@ func NewAccessWriter(store AccessStore, capacity int, onError func(error)) *Acce
 }
 
 func (writer *AccessWriter) Track(id int64, at time.Time) bool {
+	return writer.enqueue(accessRecord{id: id, at: at})
+}
+
+func (writer *AccessWriter) TrackMiss(slug string, at time.Time) bool {
+	return writer.enqueue(accessRecord{slug: slug, at: at})
+}
+
+func (writer *AccessWriter) enqueue(record accessRecord) bool {
 	writer.mu.Lock()
 	defer writer.mu.Unlock()
 	if writer.closed {
 		return false
 	}
 	select {
-	case writer.queue <- accessRecord{id: id, at: at}:
+	case writer.queue <- record:
 		return true
 	default:
 		return false
@@ -85,7 +98,13 @@ func (writer *AccessWriter) run() {
 			if !ok {
 				return
 			}
-			if err := writer.store.RecordRedirectAccess(writer.ctx, record.id, record.at); err != nil && writer.ctx.Err() == nil && writer.onError != nil {
+			var err error
+			if record.slug == "" {
+				err = writer.store.RecordRedirectAccess(writer.ctx, record.id, record.at)
+			} else if store, ok := writer.store.(MissStore); ok {
+				err = store.RecordSlugMiss(writer.ctx, record.slug, record.at)
+			}
+			if err != nil && writer.ctx.Err() == nil && writer.onError != nil {
 				writer.onError(err)
 			}
 		}
