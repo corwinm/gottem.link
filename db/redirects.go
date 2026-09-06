@@ -55,7 +55,12 @@ func (db *DbWrapper) CreateRedirect(slug, url string) (Redirect, error) {
 }
 
 func (db *DbWrapper) CreateRedirectWithExpiration(slug, url string, expiresAt *string) (Redirect, error) {
-	redirect, err := scanRedirect(db.QueryRow(`
+	tx, err := db.db.Begin()
+	if err != nil {
+		return Redirect{}, fmt.Errorf("begin create redirect: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	redirect, err := scanRedirect(tx.QueryRow(`
 		INSERT INTO redirects (slug, url, expires_at)
 		VALUES (?, ?, ?)
 		RETURNING `+redirectColumns,
@@ -66,6 +71,12 @@ func (db *DbWrapper) CreateRedirectWithExpiration(slug, url string, expiresAt *s
 	}
 	if err != nil {
 		return Redirect{}, fmt.Errorf("create redirect: %w", err)
+	}
+	if _, err := tx.Exec("DELETE FROM slug_misses WHERE slug = ?", slug); err != nil {
+		return Redirect{}, fmt.Errorf("clear resolved slug miss: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return Redirect{}, fmt.Errorf("commit create redirect: %w", err)
 	}
 	return redirect, nil
 }

@@ -14,7 +14,7 @@ proxy:
 exec:
   - cmd: "run-app -migrate-only -dsn /litefs/gottem.db"
     if-candidate: true
-  - cmd: "run-app -addr :8081 -dsn /litefs/gottem.db"
+  - cmd: "run-app -addr :8081 -dsn /litefs/gottem.db -stats-proxy-url http://127.0.0.1:8080"
 
 lease:
   type: "static"

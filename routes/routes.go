@@ -41,6 +41,7 @@ func NewRouterWithAdminStats(database *db.DbWrapper, managementToken, backupToke
 	}
 	if managementToken != "" && accessStore != nil {
 		router.Handle("/.internal/accesses", handlers.InternalAccessHandler(accessStore, managementToken))
+		router.Handle("/.internal/misses", handlers.InternalMissHandler(accessStore, managementToken))
 	}
 	return router
 }
@@ -81,6 +82,7 @@ func newRouterWithAdmin(database *db.DbWrapper, managementToken, backupToken str
 	}
 	if managementToken != "" {
 		router.Handle("/api/v1/imports", managementAuth(handlers.ManagementImportHandler(database)))
+		router.Handle("/api/v1/misses", managementAuth(handlers.ManagementMissesHandler(database)))
 		router.Handle("/api/v1/redirects", managementAuth(handlers.ManagementCollectionHandler(database, generateSlug)))
 		router.Handle("/api/v1/redirects/{slug}", managementAuth(handlers.ManagementItemHandler(database)))
 		router.Handle("/api/v1/redirects/{slug}/disable", managementAuth(handlers.ManagementDisableHandler(database)))

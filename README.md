@@ -2,7 +2,7 @@
 
 A small personal URL shortener written in Go with SQLite.
 
-The public homepage at `/` explains the service and links to the private console at `/admin/`. It does not expose public link creation or a link directory. The dependency-free page is embedded in the Go binary and leaves existing redirect routes unchanged.
+The public homepage at `/` explains the service and links to the private console at `/admin/`. Unknown short-link slugs receive a small branded 404 page. Neither page exposes public link creation or a link directory, and both dependency-free pages are embedded in the Go binary.
 
 ## Development
 
@@ -20,11 +20,11 @@ The local server listens on `:8080` and stores data in `./gottem.db`. Override e
 go run . -addr :3000 -dsn /path/to/gottem.db
 ```
 
-Set `GOTTEM_MANAGEMENT_TOKEN` to enable the private JSON management API. `GOTTEM_BACKUP_TOKEN` may separately grant read-only access to the export endpoint; it cannot access redirect management, imports, or browser sessions. Without either token, `/api/` returns 404. Creating a redirect accepts an optional `slug` and RFC3339 `expires_at`; omitted or `null` slugs are generated automatically, while custom slugs are validated and stored in lowercase. Expired and disabled links return 404 publicly but remain inspectable, and their slugs remain reserved. `destination_updated_at` records only the latest destination replacement; `updated_at` continues to record any lifecycle mutation. Management records also expose aggregate `click_count` and UTC `last_accessed_at`. Only successful active, unexpired public resolutions are counted; no visit events, IP addresses, user agents, referrers, or other visitor metadata are stored. Aggregate tracking is disabled unless both the management token and the internal `-stats-proxy-url` are configured; the production LiteFS command supplies its loopback proxy origin.
+Set `GOTTEM_MANAGEMENT_TOKEN` to enable the private JSON management API. `GOTTEM_BACKUP_TOKEN` may separately grant read-only access to the export endpoint; it cannot access redirect management, imports, or browser sessions. Without either token, `/api/` returns 404. Creating a redirect accepts an optional `slug` and RFC3339 `expires_at`; omitted or `null` slugs are generated automatically, while custom slugs are validated and stored in lowercase. Expired and disabled links return 404 publicly but remain inspectable, and their slugs remain reserved. `destination_updated_at` records only the latest destination replacement; `updated_at` continues to record any lifecycle mutation. Management records also expose aggregate `click_count` and UTC `last_accessed_at`. Only successful active, unexpired public resolutions are counted. Valid slugs that do not exist are separately aggregated by lowercase slug, count, first miss, and last miss; disabled and expired records are not counted as missing. The authenticated `GET /api/v1/misses` endpoint returns the 100 most recently missed slugs. Storage is capped at 500 slugs, and creating the matching redirect resolves its miss record. No visit events, IP addresses, user agents, referrers, or other visitor metadata are stored. Aggregate tracking is disabled unless both the management token and the internal `-stats-proxy-url` are configured; the production LiteFS command supplies its loopback proxy origin.
 
 ### Admin web UI
 
-The optional dependency-free admin console is served at `/admin`. It uses the existing JSON management API and includes create, search, copy, QR preview/download, edit, expiration, disable/enable, and confirmed delete flows. Active, disabled, and expired states are shown separately, with quiet aggregate click and last-accessed details. Configure it with the management token plus two additional values:
+The optional dependency-free admin console is served at `/admin`. It uses the existing JSON management API and includes create, search, copy, QR preview/download, edit, expiration, disable/enable, and confirmed delete flows. Active, disabled, and expired states are shown separately, with quiet aggregate click and last-accessed details. A missing-links section shows recent unresolved slug misses and can prefill a missed slug into the existing create form for correction. Configure the console with the management token plus two additional values:
 
 ```sh
 export GOTTEM_MANAGEMENT_TOKEN='...'
@@ -77,7 +77,7 @@ Pass `--json` before CRUD commands for machine-readable output, including usage 
 
 ## Deployment
 
-Merges to `main` deploy `gottem-link` through the `Fly Deploy` GitHub environment. Fly runs two machines in `sjc`; each has a LiteFS volume, and LiteFS proxies public traffic to the Go server. On candidate startup, LiteFS promotes the node, runs `run-app -migrate-only`, and only then starts the server on every node. Redirect GETs remain local; aggregate increments use authenticated internal POSTs through the loopback LiteFS proxy so replicas forward those writes to the primary.
+Merges to `main` deploy `gottem-link` through the `Fly Deploy` GitHub environment. Fly runs two machines in `sjc`; each has a LiteFS volume, and LiteFS proxies public traffic to the Go server. On candidate startup, LiteFS promotes the node, runs `run-app -migrate-only`, and only then starts the server on every node. Redirect reads remain local; aggregate click and missing-slug writes use authenticated internal POSTs through the loopback LiteFS proxy so replicas forward those writes to the primary.
 
 - `make container-test` builds the production image and exercises its LiteFS entrypoint under Docker.
 - `/.well-known/healthz` reports process health; `/.well-known/readyz` verifies database readiness.

@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"corwinm/gottem.link/db"
 	"corwinm/gottem.link/routes"
@@ -63,6 +64,7 @@ func TestAdminPageAndAssetsSecurityAndAccessibilityContracts(t *testing.T) {
 	for _, required := range []string{
 		`<main`, `id="login-form"`, `type="password"`, `autocomplete="current-password"`,
 		`brand-wordmark`, `gottem<span>.link</span>`, `id="create-form"`, `id="create-expiration"`, `type="datetime-local"`,
+		`id="misses-panel"`, `aria-labelledby="misses-heading"`, `id="misses-heading"`, `id="misses-empty-state"`, `id="miss-list"`, `<template id="miss-template"`, `class="miss-slug"`, `class="miss-count"`, `class="miss-last-seen"`, `class="button quiet use-miss"`,
 		`id="search"`, `role="status"`, `aria-live="polite"`, `<template id="redirect-template"`,
 		`class="expiration-detail"`, `class="destination-updated"`, `class="usage-count"`, `class="last-accessed"`, `aria-label="Usage statistics"`, `class="button quiet qr"`, `class="button quiet expiration"`,
 		`id="qr-dialog"`, `aria-labelledby="qr-title"`, `id="qr-image"`, `alt=""`, `id="qr-url"`, `id="qr-status"`, `role="status"`, `id="qr-error"`, `role="alert"`, `id="qr-download"`, `download`, `data-close-qr`,
@@ -83,8 +85,8 @@ func TestAdminPageAndAssetsSecurityAndAccessibilityContracts(t *testing.T) {
 		contentType string
 		contains    []string
 	}{
-		{path: "/admin/assets/admin.css", contentType: "text/css; charset=utf-8", contains: []string{"--paper: #eeeae1", "--ink: #26251f", "--accent: #e3b94e", "--signal: #765400", "Arial Black", "Georgia", "Courier New", ".button.header-button", "min-height: 44px", ":focus-visible", ".status.expired", ".qr-image", ".qr-url", "@media (max-width:", "prefers-reduced-motion"}},
-		{path: "/admin/assets/admin.js", contentType: "text/javascript; charset=utf-8", contains: []string{"textContent", "navigator.clipboard", "fetch(", "confirmDelete", "redirectStatus", "expires_at", "destination_updated_at", "click_count", "last_accessed_at", "approximately", "openQRCodeDialog", "qrDialog.showModal()", "expirationDialog.showModal()"}},
+		{path: "/admin/assets/admin.css", contentType: "text/css; charset=utf-8", contains: []string{"--paper: #eeeae1", "--ink: #26251f", "--accent: #e3b94e", "--signal: #765400", "Arial Black", "Georgia", "Courier New", ".button.header-button", "min-height: 44px", ":focus-visible", ".status.expired", ".misses-panel", ".miss-card", ".miss-card { grid-template-columns: 1fr; }", ".use-miss { width: 100%; }", ".qr-image", ".qr-url", "@media (max-width:", "prefers-reduced-motion"}},
+		{path: "/admin/assets/admin.js", contentType: "text/javascript; charset=utf-8", contains: []string{"textContent", "navigator.clipboard", "fetch(", "confirmDelete", "redirectStatus", "expires_at", "destination_updated_at", "click_count", "last_accessed_at", "miss_count", "last_missed_at", "/api/v1/misses", "renderMisses", "useMissedSlug", "approximately", "openQRCodeDialog", "qrDialog.showModal()", "expirationDialog.showModal()"}},
 	} {
 		response := httptest.NewRecorder()
 		router.ServeHTTP(response, httptest.NewRequest(http.MethodGet, asset.path, nil))
@@ -250,6 +252,28 @@ func TestAdminCookieEndToEndCRUD(t *testing.T) {
 	logout.Body.Close()
 	if len(jar.Cookies(parsedOrigin)) != 0 {
 		t.Fatalf("cookie jar after logout = %#v", jar.Cookies(parsedOrigin))
+	}
+}
+
+func TestMissingSlugListRequiresManagementAuthentication(t *testing.T) {
+	database := testDatabase(t)
+	if err := database.RecordSlugMiss(t.Context(), "shared-typo", time.Date(2026, 4, 5, 6, 7, 8, 0, time.UTC)); err != nil {
+		t.Fatal(err)
+	}
+	router := routes.NewRouterWithAdmin(database, testManagementToken, "", routes.AdminConfig{})
+
+	unauthorized := httptest.NewRecorder()
+	router.ServeHTTP(unauthorized, httptest.NewRequest(http.MethodGet, "/api/v1/misses", nil))
+	if unauthorized.Code != http.StatusUnauthorized {
+		t.Fatalf("unauthorized status = %d, want 401", unauthorized.Code)
+	}
+	authorized := managementRequest(t, router, http.MethodGet, "/api/v1/misses", "", testManagementToken)
+	var misses []db.SlugMiss
+	if err := json.Unmarshal(authorized.Body.Bytes(), &misses); err != nil {
+		t.Fatal(err)
+	}
+	if authorized.Code != http.StatusOK || len(misses) != 1 || misses[0].Slug != "shared-typo" || misses[0].MissCount != 1 {
+		t.Fatalf("status/misses = %d/%#v", authorized.Code, misses)
 	}
 }
 

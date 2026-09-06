@@ -257,6 +257,21 @@ func TestAccessWriterContinuesAfterStorageFailure(t *testing.T) {
 	}
 }
 
+func TestAccessWriterQueuesSlugMisses(t *testing.T) {
+	store := &recordingActivityStore{}
+	writer := db.NewAccessWriter(store, 4, nil)
+	at := time.Date(2026, 4, 5, 6, 7, 8, 9, time.UTC)
+	if !writer.TrackMiss("shared-typo", at) {
+		t.Fatal("writer unexpectedly dropped slug miss")
+	}
+	if err := writer.Close(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if store.slug != "shared-typo" || !store.at.Equal(at) {
+		t.Fatalf("stored miss = %q/%s", store.slug, store.at)
+	}
+}
+
 func TestAccessWriterCloseDrainsAcceptedWorkAndIsConcurrentSafe(t *testing.T) {
 	store := &recordingAccessStore{}
 	writer := db.NewAccessWriter(store, 256, nil)
@@ -311,6 +326,21 @@ func TestAccessWriterCloseStopsAtDeadlineAndDropsQueuedWork(t *testing.T) {
 	if calls := store.calls.Load(); calls != 1 {
 		t.Fatalf("storage calls = %d, want queued work dropped", calls)
 	}
+}
+
+type recordingActivityStore struct {
+	slug string
+	at   time.Time
+}
+
+func (store *recordingActivityStore) RecordRedirectAccess(context.Context, int64, time.Time) error {
+	return nil
+}
+
+func (store *recordingActivityStore) RecordSlugMiss(_ context.Context, slug string, at time.Time) error {
+	store.slug = slug
+	store.at = at
+	return nil
 }
 
 type contextBlockingAccessStore struct {

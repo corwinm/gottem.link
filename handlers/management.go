@@ -69,6 +69,22 @@ func ManagementCollectionHandler(database *db.DbWrapper, generateSlug SlugGenera
 	})
 }
 
+func ManagementMissesHandler(database *db.DbWrapper) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			w.Header().Set("Allow", "GET")
+			writeManagementError(w, http.StatusMethodNotAllowed, "method not allowed")
+			return
+		}
+		misses, err := database.ListSlugMisses()
+		if err != nil {
+			writeManagementError(w, http.StatusInternalServerError, "internal server error")
+			return
+		}
+		writeManagementJSON(w, http.StatusOK, misses)
+	})
+}
+
 func createCustomRedirect(w http.ResponseWriter, database *db.DbWrapper, slug, destination string, expiresAt *string) {
 	canonical, err := validation.ValidateSlug(slug)
 	if err != nil {

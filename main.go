@@ -49,7 +49,7 @@ func main() {
 			log.Fatal(err)
 		}
 		accessWriter = db.NewAccessWriter(accessStore, accessQueueCapacity, func(err error) {
-			log.Printf("record redirect access: %v", err)
+			log.Printf("record aggregate activity: %v", err)
 		})
 	}
 

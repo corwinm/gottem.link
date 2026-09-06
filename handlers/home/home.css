@@ -73,6 +73,11 @@ code span { color: var(--signal); font-weight: bold; }
 }
 .connector span { margin-left: 9px; }
 .directory { margin-top: 25px; color: var(--muted); font-size: 16px; line-height: 1.5; }
+.missing-main { display: grid; align-content: center; max-width: 760px; min-height: 55svh; padding-block: 56px; }
+.missing-code { color: var(--signal); font: italic 60px / .95 Georgia, serif; }
+.missing-main h2 { margin: 14px 0 0; font: 48px / 1.08 Georgia, serif; letter-spacing: -1.4px; }
+.missing-help { max-width: 560px; margin-top: 20px; color: var(--muted); font-size: 19px; line-height: 1.55; }
+.home-link { justify-self: start; margin-top: 28px; color: var(--ink); font-weight: 700; }
 footer { display: flex; justify-content: flex-end; padding: 24px 0; }
 a {
   display: inline-flex;
@@ -132,5 +137,10 @@ a:focus-visible { outline: 3px solid var(--signal); outline-offset: 5px; }
   }
   .connector span { display: inline-block; margin-left: 8px; transform: rotate(90deg); }
   .directory { margin-top: 20px; font-size: 15px; }
+  .missing-main { min-height: 62svh; padding-block: 38px; }
+  .missing-code { font-size: 44px; }
+  .missing-main h2 { margin-top: 10px; font-size: 36px; letter-spacing: -1px; }
+  .missing-help { margin-top: 16px; font-size: 17px; }
+  .home-link { margin-top: 22px; }
   footer { padding: 16px 0; }
 }

@@ -36,7 +36,24 @@ status=$(curl --silent --output /dev/null --write-out '%{http_code}' \
 	--max-time 2 "http://$address/.well-known/readyz")
 test "$status" = "200"
 
-test "$(docker exec "$container" sqlite3 -readonly /litefs/gottem.db "PRAGMA user_version;")" = "4"
+test "$(docker exec "$container" sqlite3 -readonly /litefs/gottem.db "PRAGMA user_version;")" = "5"
+
+missing_body="$temp_dir/missing.html"
+missing_status=$(curl --silent --show-error --max-time 2 \
+	--output "$missing_body" --write-out '%{http_code}|%{content_type}' \
+	"http://$address/shared-typo")
+test "$missing_status" = "404|text/html; charset=utf-8"
+grep -q "That link isn't here" "$missing_body"
+
+attempt=0
+until test "$(docker exec "$container" sqlite3 -readonly /litefs/gottem.db "SELECT miss_count FROM slug_misses WHERE slug = 'shared-typo';")" = "1"; do
+	attempt=$((attempt + 1))
+	if [ "$attempt" -ge 20 ]; then
+		printf 'missing slug was not recorded\n' >&2
+		exit 1
+	fi
+	sleep 0.1
+done
 
 unauthorized=$(curl --silent --output /dev/null --write-out '%{http_code}' \
 	--max-time 2 "http://$address/api/v1/redirects")

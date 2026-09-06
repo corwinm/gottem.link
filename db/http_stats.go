@@ -15,6 +15,7 @@ import (
 
 const accessRequestTimeout = 500 * time.Millisecond
 const internalAccessPath = "/.internal/accesses"
+const internalMissPath = "/.internal/misses"
 
 type HTTPAccessStore struct {
 	url    string
@@ -25,6 +26,11 @@ type HTTPAccessStore struct {
 type accessRequest struct {
 	RedirectID int64  `json:"redirect_id"`
 	AccessedAt string `json:"accessed_at"`
+}
+
+type missRequest struct {
+	Slug     string `json:"slug"`
+	MissedAt string `json:"missed_at"`
 }
 
 func NewHTTPAccessStore(proxyURL, token string, client *http.Client) (*HTTPAccessStore, error) {
@@ -56,11 +62,20 @@ func NewHTTPAccessStore(proxyURL, token string, client *http.Client) (*HTTPAcces
 }
 
 func (store *HTTPAccessStore) RecordRedirectAccess(ctx context.Context, id int64, accessedAt time.Time) error {
+	return store.post(ctx, internalAccessPath, accessRequest{RedirectID: id, AccessedAt: accessedAt.UTC().Format(time.RFC3339Nano)})
+}
+
+func (store *HTTPAccessStore) RecordSlugMiss(ctx context.Context, slug string, missedAt time.Time) error {
+	return store.post(ctx, internalMissPath, missRequest{Slug: slug, MissedAt: missedAt.UTC().Format(time.RFC3339Nano)})
+}
+
+func (store *HTTPAccessStore) post(ctx context.Context, path string, payload any) error {
 	var body bytes.Buffer
-	if err := json.NewEncoder(&body).Encode(accessRequest{RedirectID: id, AccessedAt: accessedAt.UTC().Format(time.RFC3339Nano)}); err != nil {
+	if err := json.NewEncoder(&body).Encode(payload); err != nil {
 		return fmt.Errorf("encode access: %w", err)
 	}
-	request, err := http.NewRequestWithContext(ctx, http.MethodPost, store.url, &body)
+	destination := strings.TrimSuffix(store.url, internalAccessPath) + path
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, destination, &body)
 	if err != nil {
 		return fmt.Errorf("create access request: %w", err)
 	}

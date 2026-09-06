@@ -10,7 +10,7 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
-const currentSchemaVersion = 4
+const currentSchemaVersion = 5
 
 const redirectsV1Schema = `(
 	id INTEGER PRIMARY KEY,
@@ -43,6 +43,13 @@ const redirectsV4Schema = `(
 	click_count INTEGER NOT NULL DEFAULT 0 CHECK (click_count >= 0),
 	last_accessed_at TEXT
 )`
+
+const slugMissesV5Schema = `(
+	slug TEXT NOT NULL COLLATE NOCASE PRIMARY KEY,
+	miss_count INTEGER NOT NULL DEFAULT 1 CHECK (miss_count >= 1),
+	first_missed_at TEXT NOT NULL,
+	last_missed_at TEXT NOT NULL
+) WITHOUT ROWID`
 
 type DbWrapper struct {
 	db *sql.DB
@@ -136,6 +143,8 @@ func migrate(database *sql.DB) error {
 			err = migrateToVersion3(database)
 		case 3:
 			err = migrateToVersion4(database)
+		case 4:
+			err = migrateToVersion5(database)
 		}
 		if err != nil {
 			return err
@@ -272,6 +281,25 @@ func migrateToVersion4(database *sql.DB) error {
 	return nil
 }
 
+func migrateToVersion5(database *sql.DB) error {
+	tx, err := database.Begin()
+	if err != nil {
+		return fmt.Errorf("begin version 5 migration: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if _, err := tx.Exec("CREATE TABLE slug_misses " + slugMissesV5Schema); err != nil {
+		return fmt.Errorf("create slug misses table: %w", err)
+	}
+	if _, err := tx.Exec("PRAGMA user_version = 5"); err != nil {
+		return fmt.Errorf("record schema version 5: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit version 5 migration: %w", err)
+	}
+	return nil
+}
+
 func (dbWrapper *DbWrapper) Close() {
 	dbWrapper.db.Close()
 }
@@ -300,6 +328,13 @@ func (db *DbWrapper) Ready(ctx context.Context) error {
 		return fmt.Errorf("database schema version %d, want %d", version, currentSchemaVersion)
 	}
 	rows, err := db.db.QueryContext(ctx, "SELECT disabled_at, expires_at, destination_updated_at, click_count, last_accessed_at FROM redirects LIMIT 0")
+	if err != nil {
+		return err
+	}
+	if err := rows.Close(); err != nil {
+		return err
+	}
+	rows, err = db.db.QueryContext(ctx, "SELECT slug, miss_count, first_missed_at, last_missed_at FROM slug_misses LIMIT 0")
 	if err != nil {
 		return err
 	}
