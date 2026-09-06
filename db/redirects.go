@@ -135,6 +135,9 @@ func (db *DbWrapper) ImportRedirects(redirects []ImportRedirect) error {
 		if err != nil {
 			return fmt.Errorf("import redirect: %w", err)
 		}
+		if _, err := tx.Exec("DELETE FROM slug_misses WHERE slug = ?", redirect.Slug); err != nil {
+			return fmt.Errorf("clear imported slug miss: %w", err)
+		}
 	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit redirect import: %w", err)

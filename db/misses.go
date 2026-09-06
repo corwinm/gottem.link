@@ -20,7 +20,12 @@ type SlugMiss struct {
 func (db *DbWrapper) RecordSlugMiss(ctx context.Context, slug string, missedAt time.Time) error {
 	slug = strings.ToLower(slug)
 	value := missedAt.UTC().Format(time.RFC3339Nano)
-	if _, err := db.db.ExecContext(ctx, `
+	tx, err := db.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin record slug miss: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	if _, err := tx.ExecContext(ctx, `
 		INSERT INTO slug_misses (slug, miss_count, first_missed_at, last_missed_at)
 		SELECT ?, 1, ?, ?
 		WHERE NOT EXISTS (SELECT 1 FROM redirects WHERE slug = ?)
@@ -31,7 +36,7 @@ func (db *DbWrapper) RecordSlugMiss(ctx context.Context, slug string, missedAt t
 	`, slug, value, value, slug); err != nil {
 		return fmt.Errorf("record slug miss: %w", err)
 	}
-	if _, err := db.db.ExecContext(ctx, `
+	if _, err := tx.ExecContext(ctx, `
 		DELETE FROM slug_misses
 		WHERE slug IN (
 			SELECT slug FROM slug_misses
@@ -40,6 +45,9 @@ func (db *DbWrapper) RecordSlugMiss(ctx context.Context, slug string, missedAt t
 		)
 	`, maxStoredSlugMisses); err != nil {
 		return fmt.Errorf("prune slug misses: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit record slug miss: %w", err)
 	}
 	return nil
 }

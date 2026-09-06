@@ -75,6 +75,32 @@ func TestCreatingRedirectRemovesResolvedSlugMiss(t *testing.T) {
 	}
 }
 
+func TestImportingRedirectRemovesResolvedSlugMiss(t *testing.T) {
+	database, err := db.GetDB(filepath.Join(t.TempDir(), "gottem.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(database.Close)
+	if err := database.RecordSlugMiss(context.Background(), "shared-typo", time.Now()); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := database.ImportRedirects([]db.ImportRedirect{{
+		Slug: "SHARED-TYPO",
+		URL:  "https://example.com/corrected",
+	}}); err != nil {
+		t.Fatal(err)
+	}
+
+	misses, err := database.ListSlugMisses()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(misses) != 0 {
+		t.Fatalf("resolved misses = %#v, want none", misses)
+	}
+}
+
 func TestSlugMissRetentionIsBoundedToMostRecentFiveHundred(t *testing.T) {
 	database, err := db.GetDB(filepath.Join(t.TempDir(), "gottem.db"))
 	if err != nil {
@@ -101,5 +127,53 @@ func TestSlugMissRetentionIsBoundedToMostRecentFiveHundred(t *testing.T) {
 	}
 	if oldestExists {
 		t.Error("oldest miss was not pruned")
+	}
+}
+
+func TestRecordSlugMissRollsBackWhenRetentionPruningFails(t *testing.T) {
+	database, err := db.GetDB(filepath.Join(t.TempDir(), "gottem.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(database.Close)
+	if _, err := database.Exec(`
+		WITH RECURSIVE numbers(value) AS (
+			VALUES(0)
+			UNION ALL
+			SELECT value + 1 FROM numbers WHERE value < 499
+		)
+		INSERT INTO slug_misses (slug, miss_count, first_missed_at, last_missed_at)
+		SELECT printf('miss-%03d', value), 1, '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z'
+		FROM numbers
+	`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := database.Exec(`
+		CREATE TRIGGER reject_slug_miss_pruning
+		BEFORE DELETE ON slug_misses
+		BEGIN
+			SELECT RAISE(ABORT, 'forced prune failure');
+		END
+	`); err != nil {
+		t.Fatal(err)
+	}
+
+	err = database.RecordSlugMiss(context.Background(), "newest", time.Date(2026, 1, 2, 0, 0, 0, 0, time.UTC))
+	if err == nil {
+		t.Fatal("record miss succeeded despite prune failure")
+	}
+	var count int
+	if err := database.QueryRow("SELECT COUNT(*) FROM slug_misses").Scan(&count); err != nil {
+		t.Fatal(err)
+	}
+	if count != 500 {
+		t.Fatalf("stored miss rows after prune failure = %d, want 500", count)
+	}
+	var newestExists bool
+	if err := database.QueryRow("SELECT EXISTS(SELECT 1 FROM slug_misses WHERE slug = 'newest')").Scan(&newestExists); err != nil {
+		t.Fatal(err)
+	}
+	if newestExists {
+		t.Error("new miss survived failed retention pruning")
 	}
 }
