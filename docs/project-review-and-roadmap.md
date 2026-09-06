@@ -12,11 +12,12 @@
 
 ## Current status
 
-Updated against `main` at `2fde23f` on 2026-09-05.
+Updated against `main` at `4bb30e4` on 2026-09-06.
 
 - **Complete:** Milestones 0–2 are deployed. The service has a tested redirect path, authenticated management API and CLI, import/export, encrypted backups, a private admin UI, a public homepage, lifecycle controls, and privacy-conscious aggregate usage statistics.
 - **Complete:** Go 1.27 is aligned across local, CI, Docker, and Fly builds; formatting, tests, race tests, vet, vulnerability scanning, builds, backup restoration, and production-image smoke tests are enforced.
 - **Complete:** schema version 5 is applied transactionally by the candidate-only LiteFS migration phase. Existing data is preserved, serving remains non-migrating, and unknown newer schemas fail closed.
+- **Complete:** normal serving validates database connectivity and the current schema before binding the HTTP listener without performing migrations.
 - **Complete:** production runs in `sjc` on encrypted Fly volumes with LiteFS, health/readiness checks, graceful shutdown, restore verification, and a documented deployment path.
 - **Complete:** aggregate click count and last-accessed time are available without retaining IP addresses, user agents, referrers, or raw visit events.
 - **Complete:** Milestone 3.1 adds stateless authenticated QR preview/download for existing links when the admin UI is fully configured.
@@ -27,7 +28,7 @@ The service is live at `https://gottem.link`; routine link management no longer 
 
 ## Verified current state
 
-The Milestone 2.4 deployment at `87a5242` passed GitHub Quality, Container, and Deploy jobs. Production health and readiness returned 200, schema version 4 passed `PRAGMA quick_check`, and a disposable production link verified aggregate click tracking before being removed.
+The Milestone 3.2 deployment at `4bb30e4` passed GitHub Quality, Container, and Deploy jobs. The next scheduled encrypted backup also passed. Production health and readiness returned 200, schema version 5 passed validation, the branded missing-link page recorded aggregate misses, and creating the intended redirect cleared the miss and returned 302.
 
 ## Original findings
 
@@ -127,7 +128,7 @@ Keep it short and update it as commands become real:
 
 **Done when:** all build surfaces use one supported Go version and `govulncheck ./...` reports no reachable vulnerabilities.
 
-#### 0.1 Characterize and fix configuration — Complete except startup validation
+#### 0.1 Characterize and fix configuration — Complete
 
 - Add failing tests proving that a configured database is used.
 - Parse `-addr` and `-dsn` into an application configuration object.
@@ -135,6 +136,8 @@ Keep it short and update it as commands become real:
 - Fail startup with a useful error if the database cannot open or migrate.
 
 **Done when:** the production-style command reads a seeded persistent database, restart preserves its links, and tests fail if the DSN is ignored.
+
+**Delivered:** normal serving opens the configured database once, validates connectivity and the current required schema with a bounded startup check, and fails before binding the HTTP listener when validation fails. Migration remains an explicit candidate-only mode.
 
 #### 0.2 Fix redirect HTTP semantics — Complete
 

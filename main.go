@@ -16,6 +16,7 @@ import (
 )
 
 const shutdownTimeout = 10 * time.Second
+const databaseStartupTimeout = 10 * time.Second
 const accessQueueCapacity = 256
 
 func main() {
@@ -31,7 +32,7 @@ func main() {
 		return
 	}
 
-	database, err := db.Open(config.dsn)
+	database, err := openServingDatabase(config.dsn)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -76,6 +77,20 @@ func main() {
 	if err := serve(ctx, server, listener, accessWriter); err != nil {
 		log.Fatal(err)
 	}
+}
+
+func openServingDatabase(dsn string) (*db.DbWrapper, error) {
+	database, err := db.Open(dsn)
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), databaseStartupTimeout)
+	defer cancel()
+	if err := database.Ready(ctx); err != nil {
+		database.Close()
+		return nil, fmt.Errorf("validate database: %w", err)
+	}
+	return database, nil
 }
 
 func serve(ctx context.Context, server *http.Server, listener net.Listener, accessWriter *db.AccessWriter) error {
