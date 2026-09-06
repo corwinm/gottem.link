@@ -80,7 +80,7 @@ Pass `--json` before CRUD commands for machine-readable output, including usage 
 Merges to `main` deploy `gottem-link` through the `Fly Deploy` GitHub environment. Fly runs two machines in `sjc`; each has a LiteFS volume, and LiteFS proxies public traffic to the Go server. On candidate startup, LiteFS promotes the node, runs `run-app -migrate-only`, and only then starts the server on every node. Redirect reads remain local; aggregate click and missing-slug writes use authenticated internal POSTs through the loopback LiteFS proxy so replicas forward those writes to the primary.
 
 - `make container-test` builds the production image and exercises its LiteFS entrypoint under Docker.
-- `/.well-known/healthz` reports process health; `/.well-known/readyz` verifies database readiness.
+- Server startup verifies the database and current schema before binding its listener. `/.well-known/healthz` reports process health; `/.well-known/readyz` continues verifying database readiness while serving.
 - [Operations](docs/operations.md) covers topology, backups, restore testing, and rollback.
 
 Do not change production secrets, volumes, LiteFS topology, or the database schema without a backup and an explicit rollout plan.

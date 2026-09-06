@@ -46,6 +46,30 @@ func TestParseConfigUsesNamedFlags(t *testing.T) {
 	}
 }
 
+func TestOpenServingDatabaseRejectsUnavailableDatabase(t *testing.T) {
+	database, err := openServingDatabase(filepath.Join(t.TempDir(), "missing", "gottem.db"))
+	if database != nil {
+		database.Close()
+		t.Fatal("openServingDatabase returned a database for an unavailable path")
+	}
+	if err == nil {
+		t.Fatal("openServingDatabase accepted an unavailable database")
+	}
+}
+
+func TestOpenServingDatabaseAcceptsCurrentSchema(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "gottem.db")
+	if err := db.Migrate(path); err != nil {
+		t.Fatalf("migrate database: %v", err)
+	}
+
+	database, err := openServingDatabase(path)
+	if err != nil {
+		t.Fatalf("openServingDatabase returned an error: %v", err)
+	}
+	database.Close()
+}
+
 func TestParseConfigDisablesStatsUnlessProxyIsConfigured(t *testing.T) {
 	t.Setenv("GOTTEM_MANAGEMENT_TOKEN", "test-management-token")
 	t.Setenv("GOTTEM_BACKUP_TOKEN", "")
